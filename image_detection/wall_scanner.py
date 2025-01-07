@@ -71,25 +71,74 @@ def process_image(image_path):
 
 def save_as_svg(blobs, output_path):
     """Save the detected holds as an SVG file."""
-    import svgwrite
-    
-    # Create SVG drawing with the same dimensions as the image
-    dwg = svgwrite.Drawing(output_path, profile='tiny')
-    
-    # Add holds to the SVG
-    for blob in blobs:
-        # Convert contour points to SVG polygon points
-        points = [(int(x), int(y)) for x, y in blob.contour.reshape(-1, 2)]
-        # Add polygon with hold color
-        dwg.add(dwg.polygon(points, 
-                           fill=blob.color if blob.color != "unknown" else "#808080",
-                           stroke="#000000",
-                           stroke_width=1,
-                           opacity=0.5))
-    
-    # Save the SVG file
-    dwg.save()
-    print(f"Saved SVG to: {output_path}")
+    try:
+        # Get image dimensions from first blob's mask
+        if blobs and blobs[0].mask is not None:
+            height, width = blobs[0].mask.shape
+        else:
+            width, height = 1920, 1080  # Default dimensions if no blobs
+        
+        # Create SVG content manually
+        svg_content = [
+            '<?xml version="1.0" encoding="utf-8"?>',
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}px" height="{height}px" viewBox="0 0 {width} {height}">',
+            '<g>'  # Root group
+        ]
+        
+        # Add holds to the SVG
+        for blob in blobs:
+            try:
+                # Ensure contour is properly shaped
+                if blob.contour is None or len(blob.contour) < 3:
+                    print(f"Skipping invalid contour for blob at {blob.center}")
+                    continue
+                
+                # Convert contour points to SVG polygon points
+                contour = blob.contour.reshape(-1, 2)
+                points = []
+                for x, y in contour:
+                    points.append(f"{float(x)},{float(y)}")
+                points_str = " ".join(points)
+                
+                # Create polygon with hold color and t-nut location metadata
+                color = blob.color if blob.color != "unknown" else "#808080"
+                tnut_x = float(blob.center[0])
+                tnut_y = float(blob.center[1])
+                
+                polygon = (
+                    f'<polygon points="{points_str}" '
+                    f'fill="{color}" '
+                    f'stroke="#000000" '
+                    f'stroke-width="1" '
+                    f'opacity="0.5" '
+                    f'data-tnut-x="{tnut_x}" '
+                    f'data-tnut-y="{tnut_y}"/>'
+                )
+                svg_content.append(polygon)
+                
+            except Exception as e:
+                print(f"Error adding blob to SVG: {e}")
+                continue
+        
+        # Close SVG tags
+        svg_content.extend(['</g>', '</svg>'])
+        
+        # Ensure the output directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Write the SVG file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(svg_content))
+        
+        # Verify the file was created and has content
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            print(f"Successfully saved SVG to: {output_path}")
+        else:
+            print(f"Warning: SVG file may be empty or not created properly at: {output_path}")
+            
+    except Exception as e:
+        print(f"Error saving SVG file: {e}")
+        raise
 
 def main():
     # Get the absolute paths for the directories
