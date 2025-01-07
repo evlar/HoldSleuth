@@ -33,7 +33,7 @@ def select_image(images):
         except ValueError:
             print("Please enter a valid number.")
 
-def process_image(image_path):
+def process_image(image_path, confidence_threshold=0.25, nms_iou_threshold=0.45):
     """Process an image to detect holds using YOLO and SAM."""
     # Load image
     image = cv2.imread(image_path)
@@ -41,8 +41,11 @@ def process_image(image_path):
         raise ValueError(f"Failed to load image: {image_path}")
     
     # Initialize detectors with default model paths
-    yolo_detector = YOLOHoldDetector()  # Will use default model path from the class
-    blob_extractor = SAMBlobExtractor()  # Will use default SAM model path
+    yolo_detector = YOLOHoldDetector(
+        confidence_threshold=confidence_threshold,
+        nms_iou_threshold=nms_iou_threshold
+    )
+    blob_extractor = SAMBlobExtractor()
     
     # Detect holds using YOLO
     print("Detecting holds with YOLO...")
@@ -161,8 +164,14 @@ def main():
     print(f"\nProcessing image: {selected_image}")
     
     try:
-        # Process the image and get the detected holds
-        blobs = process_image(image_path)
+        # Process the image with slightly adjusted thresholds
+        # Lower confidence threshold to catch more holds
+        # Stricter NMS threshold to better handle overlaps
+        blobs = process_image(
+            image_path,
+            confidence_threshold=0.2,  # Lower threshold to catch more holds
+            nms_iou_threshold=0.4      # Stricter NMS to better handle overlaps
+        )
         
         # Save the results as SVG
         base_name = os.path.splitext(selected_image)[0]

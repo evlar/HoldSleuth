@@ -13,7 +13,7 @@ class Hold:
     color: str = "unknown"
 
 class YOLOHoldDetector:
-    def __init__(self, model_path: str = None):
+    def __init__(self, model_path: str = None, confidence_threshold: float = 0.25, nms_iou_threshold: float = 0.45):
         if model_path is None:
             # Try to find the trained model in the model directory
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +29,9 @@ class YOLOHoldDetector:
         else:
             self.model = YOLO(model_path)
         
+        self.confidence_threshold = confidence_threshold
+        self.nms_iou_threshold = nms_iou_threshold
+        
         # Color ranges in HSV
         self.color_ranges = {
             "yellow": ((20, 100, 100), (40, 255, 255)),
@@ -43,7 +46,7 @@ class YOLOHoldDetector:
         
         for box in results.boxes:
             confidence = float(box.conf[0])
-            if confidence < 0.25:  # Adjust this threshold as needed
+            if confidence < self.confidence_threshold:
                 continue
                 
             x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -62,6 +65,9 @@ class YOLOHoldDetector:
                 confidence=confidence,
                 color=color
             ))
+        
+        # Apply NMS to remove overlapping detections
+        holds = self._apply_nms(holds)
         
         return holds
     
@@ -112,3 +118,43 @@ class YOLOHoldDetector:
             cv2.putText(result, text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
         return result 
+    
+    def _apply_nms(self, holds: List[Hold]) -> List[Hold]:
+        """Apply Non-Maximum Suppression to remove overlapping detections."""
+        if not holds:
+            return holds
+            
+        # Convert holds to numpy arrays for easier processing
+        boxes = np.array([[h.bbox[0], h.bbox[1], h.bbox[2], h.bbox[3]] for h in holds])
+        scores = np.array([h.confidence for h in holds])
+        
+        # Calculate areas
+        areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+        
+        # Sort by confidence
+        order = scores.argsort()[::-1]
+        
+        keep = []
+        while order.size > 0:
+            i = order[0]
+            keep.append(i)
+            
+            if order.size == 1:
+                break
+                
+            # Calculate IoU with rest of boxes
+            xx1 = np.maximum(boxes[i, 0], boxes[order[1:], 0])
+            yy1 = np.maximum(boxes[i, 1], boxes[order[1:], 1])
+            xx2 = np.minimum(boxes[i, 2], boxes[order[1:], 2])
+            yy2 = np.minimum(boxes[i, 3], boxes[order[1:], 3])
+            
+            w = np.maximum(0.0, xx2 - xx1)
+            h = np.maximum(0.0, yy2 - yy1)
+            inter = w * h
+            
+            ovr = inter / (areas[i] + areas[order[1:]] - inter)
+            
+            inds = np.where(ovr <= self.nms_iou_threshold)[0]
+            order = order[inds + 1]
+        
+        return [holds[i] for i in keep] 
