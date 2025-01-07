@@ -82,7 +82,7 @@ class YOLOHoldDetector:
         color_map = {
             "yellow": (0, 255, 255),
             "blue": (255, 0, 0),
-            "gray": (128, 128, 128),
+            "gray": (0, 255, 0),
             "unknown": (0, 255, 0)
         }
         

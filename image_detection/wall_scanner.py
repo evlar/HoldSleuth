@@ -1,8 +1,9 @@
 import os
 import cv2
 import numpy as np
-from image_detection.yolo_hold_detector import YOLOHoldDetector
+from image_detection.yolo_hold_detector import YOLOHoldDetector, Hold
 from image_detection.sam_blob_extractor import SAMBlobExtractor
+import matplotlib.pyplot as plt
 
 def list_images(image_dir):
     """List all images in the specified directory."""
@@ -59,6 +60,9 @@ def process_image(image_path, confidence_threshold=0.25, nms_iou_threshold=0.45)
     print("Detecting holds with YOLO...")
     holds = yolo_detector.detect_holds(image)
     print(f"Found {len(holds)} holds")
+    
+    # Allow manual selection of undetected holds
+    holds = manual_selection(image, holds, yolo_detector)
     
     # Extract precise shapes using SAM
     print("Extracting precise shapes with SAM...")
@@ -150,6 +154,109 @@ def save_as_svg(blobs, output_path):
     except Exception as e:
         print(f"Error saving SVG file: {e}")
         raise
+
+def manual_selection(image, detected_holds, yolo_detector):
+    """Allow user to manually select undetected holds by clicking on the image."""
+    # Draw detected holds on the image
+    result_image = yolo_detector.draw_holds(image, detected_holds)
+
+    # Display the image with detected holds
+    fig, ax = plt.subplots()
+    ax.imshow(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB))
+    plt.title('Click on t-nut (center) of undetected hold, then drag to create bounding box.\nPress Z to undo last selection, Enter when done.')
+
+    # Store manually selected holds
+    selected_holds = []
+    current_center = None
+    rect = None
+    preview_rect = None  # For live preview while dragging
+    markers = []  # Store markers for undo
+
+    def onclick(event):
+        nonlocal current_center
+        if event.xdata is not None and event.ydata is not None:
+            current_center = (int(event.xdata), int(event.ydata))
+            marker = ax.plot(current_center[0], current_center[1], 'ro')[0]  # Store marker reference
+            markers.append(marker)
+            fig.canvas.draw()
+
+    def onmotion(event):
+        nonlocal preview_rect
+        if current_center and event.xdata is not None and event.ydata is not None:
+            x2, y2 = int(event.xdata), int(event.ydata)
+            # Create bounding box coordinates
+            x1 = min(current_center[0], x2)
+            y1 = min(current_center[1], y2)
+            x2 = max(current_center[0], x2)
+            y2 = max(current_center[1], y2)
+            
+            # Update preview rectangle
+            if preview_rect:
+                preview_rect.remove()
+            preview_rect = plt.Rectangle((x1, y1), x2-x1, y2-y1, fill=False, color='r', linestyle='--')
+            ax.add_patch(preview_rect)
+            fig.canvas.draw()
+
+    def onrelease(event):
+        nonlocal current_center, rect, preview_rect
+        if current_center and event.xdata is not None and event.ydata is not None:
+            x2, y2 = int(event.xdata), int(event.ydata)
+            # Create bounding box coordinates
+            x1 = min(current_center[0], x2)
+            y1 = min(current_center[1], y2)
+            x2 = max(current_center[0], x2)
+            y2 = max(current_center[1], y2)
+            
+            # Remove preview rectangle
+            if preview_rect:
+                preview_rect.remove()
+                preview_rect = None
+            
+            # Draw final rectangle
+            if rect:
+                rect.remove()
+            rect = plt.Rectangle((x1, y1), x2-x1, y2-y1, fill=False, color='r')
+            ax.add_patch(rect)
+            
+            # Add to selected holds
+            selected_holds.append({
+                'hold': Hold(
+                    center=current_center,
+                    bbox=(x1, y1, x2, y2),
+                    confidence=1.0,
+                    color='gray'
+                ),
+                'rect': rect,
+                'marker': markers[-1] if markers else None
+            })
+            
+            current_center = None
+            rect = None
+            fig.canvas.draw()
+
+    def on_key(event):
+        nonlocal current_center, rect, preview_rect
+        if event.key == 'enter':
+            plt.close(fig)
+        elif event.key == 'z' and selected_holds:  # Undo last selection
+            # Remove last hold's visual elements
+            last_hold = selected_holds.pop()
+            if last_hold['rect']:
+                last_hold['rect'].remove()
+            if last_hold['marker']:
+                last_hold['marker'].remove()
+            fig.canvas.draw()
+
+    # Connect event handlers
+    fig.canvas.mpl_connect('button_press_event', onclick)
+    fig.canvas.mpl_connect('motion_notify_event', onmotion)
+    fig.canvas.mpl_connect('button_release_event', onrelease)
+    fig.canvas.mpl_connect('key_press_event', on_key)
+    plt.show()
+
+    # Add manually selected holds to detected holds
+    detected_holds.extend(hold_data['hold'] for hold_data in selected_holds)
+    return detected_holds
 
 def main():
     # Get the absolute paths for the directories
