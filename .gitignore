@@ -158,3 +158,6 @@ tmp/
 *.bak
 *.backup
 *.old
+
+# Exception for fulltread.jpg
+!image_detection/images/fulltread.jpg

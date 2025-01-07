@@ -73,24 +73,7 @@ class YOLOHoldDetector:
     
     def _classify_color(self, image: np.ndarray) -> str:
         """Classify the color of a hold based on its HSV values."""
-        if image.size == 0:
-            return "unknown"
-        
-        # Convert to HSV
-        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        
-        # Calculate average HSV values
-        avg_hsv = np.mean(hsv, axis=(0, 1))
-        
-        # Check each color range
-        for color, (lower, upper) in self.color_ranges.items():
-            lower = np.array(lower)
-            upper = np.array(upper)
-            
-            if np.all(avg_hsv >= lower) and np.all(avg_hsv <= upper):
-                return color
-        
-        return "unknown"
+        return "gray"
     
     def draw_holds(self, image: np.ndarray, holds: List[Hold]) -> np.ndarray:
         """Draw detected holds on the image."""
