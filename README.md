@@ -19,6 +19,13 @@ For detailed information about the detection process, see [Detection Process Doc
 - [Planned] Real-time detection from video feed
 - [Planned] 3D scanning capabilities
 
+## Credits
+
+This project uses the following models:
+
+- **YOLO Model**: The climbing hold detection model (`best.pt`) is from [climbingcrux_model](https://github.com/mkurc1/climbingcrux_model) by [mkurc1](https://github.com/mkurc1)
+- **SAM Model**: Uses the Segment Anything Model architecture from [Meta Research](https://github.com/facebookresearch/segment-anything). The `sam_vit_h_4b8939.pth` weights file can be downloaded from their [releases page](https://github.com/facebookresearch/segment-anything/releases/).
+
 ## Requirements
 
 See `requirements.txt` for a complete list of dependencies.
@@ -28,15 +35,24 @@ See `requirements.txt` for a complete list of dependencies.
 This project requires two model files that need to be downloaded separately due to their size:
 
 1. **SAM Model** (`sam_vit_h_4b8939.pth`):
-   - Download from [SAM Releases](https://github.com/facebookresearch/segment-anything/releases/)
+   ```bash
+   # Download SAM model to the models directory
+   mkdir -p models
+   cd models
+   wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+   cd ..
+   ```
+   - Or download manually from [SAM Releases](https://github.com/facebookresearch/segment-anything/releases/)
    - Place in the `models/` directory
    - Used for precise hold shape extraction
 
 2. **YOLO Model** (`best.pt`):
-   - Place in `image_detection/model/` directory
-   - Options:
-     - Use your own trained YOLO model
-     - Or the project will automatically download and use YOLOv8n
+   - Download from [climbingcrux_model](https://github.com/mkurc1/climbingcrux_model) repository:
+     1. Go to the repository
+     2. Find "Download the model" link in their README
+     3. Download `best.pt`
+   - Place the downloaded `best.pt` in `image_detection/model/` directory
+   - If no model is found, the project will automatically download and use YOLOv8n (not recommended for climbing holds)
 
 ## Installation
 
