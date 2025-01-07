@@ -40,6 +40,14 @@ def process_image(image_path, confidence_threshold=0.25, nms_iou_threshold=0.45)
     if image is None:
         raise ValueError(f"Failed to load image: {image_path}")
     
+    # Enhance contrast using CLAHE
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=5.0, tileGridSize=(4, 4))
+    cl = clahe.apply(l)
+    limg = cv2.merge((cl, a, b))
+    image = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+    
     # Initialize detectors with default model paths
     yolo_detector = YOLOHoldDetector(
         confidence_threshold=confidence_threshold,
@@ -169,7 +177,7 @@ def main():
         # Stricter NMS threshold to better handle overlaps
         blobs = process_image(
             image_path,
-            confidence_threshold=0.2,  # Lower threshold to catch more holds
+            confidence_threshold=0.05,  # Lower threshold to catch more holds
             nms_iou_threshold=0.4      # Stricter NMS to better handle overlaps
         )
         
