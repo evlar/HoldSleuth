@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}HoldSleuth - Home{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 text-center mb-4">
+        <h1>Welcome to HoldSleuth</h1>
+        <p class="lead">Scan, create, and manage climbing routes for your treadwall</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Scan Wall</h5>
+                <p class="card-text">Upload a photo of your treadwall to detect and map climbing holds.</p>
+                <a href="{{ url_for('scan_page') }}" class="btn btn-primary">Start Scanning</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Route Management</h5>
+                <p class="card-text">Create, view, and manage climbing routes for your treadwall.</p>
+                <a href="{{ url_for('routes_page') }}" class="btn btn-primary">Manage Routes</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Getting Started</h5>
+                <ol class="card-text">
+                    <li>Upload a photo of your treadwall using the Scan Wall feature</li>
+                    <li>Wait for the system to detect and map the holds</li>
+                    <li>Create routes by selecting holds on the mapped wall</li>
+                    <li>Save and manage your routes in the Route Management section</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

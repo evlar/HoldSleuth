@@ -1,9 +1,13 @@
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+
 import os
 import cv2
 import numpy as np
 from image_detection.yolo_hold_detector import YOLOHoldDetector, Hold
 from image_detection.sam_blob_extractor import SAMBlobExtractor
-import matplotlib.pyplot as plt
+import svgwrite
 
 def list_images(image_dir):
     """List all images in the specified directory."""

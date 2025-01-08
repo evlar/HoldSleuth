@@ -1,7 +1,7 @@
 import os
 import cv2
-from wall_scanner import process_image
-from SVG_to_image_grid import convert_svg_to_jpeg_grid
+from image_detection.wall_scanner import process_image
+from image_detection.SVG_to_image_grid import convert_svg_to_jpeg_grid
 
 def scan_treadwall(image_path, confidence_threshold=0.25, nms_iou_threshold=0.4):
     """
@@ -40,6 +40,8 @@ def scan_treadwall(image_path, confidence_threshold=0.25, nms_iou_threshold=0.4)
         print("\nOutputs saved:")
         print(f"- Grid JPEG: output/grid/converted_grid_{base_name}.jpg")
         print(f"- Grid SVG: output/svg/grid/{base_name}_grid.svg")
+        
+        return output_svg, output_jpg
         
     except Exception as e:
         print(f"\nError during processing: {e}")

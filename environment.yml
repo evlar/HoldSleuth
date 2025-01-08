@@ -1,0 +1,28 @@
+name: holdsleuth
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.8,<3.13
+  - pytorch
+  - torchvision
+  - flask>=2.3.0
+  - numpy>=1.23.0,<2.0.0
+  - opencv
+  - pillow>=10.0.0
+  - pytest>=7.4.0
+  - pip
+  - werkzeug>=3.0.1
+  - python-dateutil>=2.8.2
+  - matplotlib>=3.3.0
+  - pyyaml>=5.3.1
+  - requests>=2.23.0
+  - scipy>=1.4.1
+  - pip:
+    - ultralytics==8.3.0
+    - svgwrite>=1.4.3
+    - cairosvg>=2.7.1
+    - segment-anything
+    - git+https://github.com/facebookresearch/segment-anything.git 

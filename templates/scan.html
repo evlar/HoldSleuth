@@ -1,0 +1,371 @@
+{% extends "base.html" %}
+
+{% block title %}HoldSleuth - Scan Wall{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2>Scan Wall</h2>
+        <p class="lead">Upload a photo of your treadwall to detect and map the holds</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <form id="uploadForm" class="mb-4">
+                    <div class="mb-3">
+                        <label for="wallImage" class="form-label">Wall Photo</label>
+                        <input type="file" class="form-control" id="wallImage" accept=".jpg,.jpeg,.png" required>
+                        <div class="form-text">Upload a clear, well-lit photo of your treadwall.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Process Image</button>
+                </form>
+
+                <div id="loadingSpinner" class="loading-spinner">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Processing image... This may take a few moments.</p>
+                </div>
+
+                <div id="errorMessage" class="error-message"></div>
+
+                <div id="reviewSection" style="display: none;">
+                    <h4 class="mb-3">Review Detections</h4>
+                    <p>
+                        Left click: place t-nut<br>
+                        Left click+drag: draw box<br>
+                        Right-click: remove detection<br>
+                        Z: undo<br>
+                        Enter: done<br>
+                        Hold Shift: mouse wheel to zoom, click+drag to pan
+                    </p>
+                    <div class="wall-container" style="overflow: hidden;">
+                        <div id="imageWrapper" style="transform-origin: 0 0;">
+                            <img id="detectionImage" class="wall-image" alt="Initial detections">
+                            <div id="holdOverlay" class="hold-overlay">
+                                <div id="selectionBox" style="display: none; position: absolute; border: 2px dashed red; pointer-events: none;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="results" style="display: none;">
+                    <h4 class="mb-3">Final Results</h4>
+                    <div class="wall-container">
+                        <img id="processedImage" class="wall-image" alt="Processed wall image">
+                        <div id="finalHoldOverlay" class="hold-overlay"></div>
+                    </div>
+                    <div class="mt-3">
+                        <a id="createRouteBtn" href="/routes/create" class="btn btn-success">Create Route</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentScanId = null;
+let currentHolds = [];
+let undoStack = [];
+let isDragging = false;
+let dragStart = null;
+let scale = 1;
+let translateX = 0;
+let translateY = 0;
+let isPanning = false;
+let lastPanPoint = null;
+
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const fileInput = document.getElementById('wallImage');
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const errorMessage = document.getElementById('errorMessage');
+    const reviewSection = document.getElementById('reviewSection');
+    const results = document.getElementById('results');
+    const detectionImage = document.getElementById('detectionImage');
+
+    loadingSpinner.style.display = 'block';
+    errorMessage.textContent = '';
+    reviewSection.style.display = 'none';
+    results.style.display = 'none';
+
+    try {
+        const response = await axios.post('/scan', formData);
+        currentScanId = response.data.scan_id;
+        currentHolds = response.data.holds;
+        detectionImage.src = response.data.detection_path;
+        detectionImage.onload = () => {
+            updateHoldOverlay();
+            reviewSection.style.display = 'block';
+        };
+    } catch (error) {
+        errorMessage.textContent = error.response?.data?.error || 'An error occurred while processing the image';
+    } finally {
+        loadingSpinner.style.display = 'none';
+    }
+});
+
+function updateHoldOverlay() {
+    const holdOverlay = document.getElementById('holdOverlay');
+    const selectionBox = document.getElementById('selectionBox');
+    holdOverlay.innerHTML = '';
+    holdOverlay.appendChild(selectionBox);
+    
+    currentHolds.forEach((hold, index) => {
+        const holdElement = document.createElement('div');
+        holdElement.className = 'hold hold-regular';
+        holdElement.style.left = `${hold.center[0]}px`;
+        holdElement.style.top = `${hold.center[1]}px`;
+        holdElement.dataset.index = index;
+        
+        // Create bounding box visualization
+        const boxElement = document.createElement('div');
+        boxElement.className = 'hold-box';
+        boxElement.style.left = `${hold.bbox[0]}px`;
+        boxElement.style.top = `${hold.bbox[1]}px`;
+        boxElement.style.width = `${hold.bbox[2] - hold.bbox[0]}px`;
+        boxElement.style.height = `${hold.bbox[3] - hold.bbox[1]}px`;
+        
+        holdOverlay.appendChild(holdElement);
+        holdOverlay.appendChild(boxElement);
+    });
+}
+
+const imageWrapper = document.getElementById('imageWrapper');
+const holdOverlay = document.getElementById('holdOverlay');
+const selectionBox = document.getElementById('selectionBox');
+
+holdOverlay.addEventListener('mousedown', (e) => {
+    if (e.shiftKey) {
+        if (e.button === 0) { // Left click for panning
+            isPanning = true;
+            lastPanPoint = { x: e.clientX, y: e.clientY };
+        }
+        return;
+    }
+
+    if (e.button === 0) { // Left click
+        isDragging = true;
+        dragStart = {
+            x: e.offsetX,
+            y: e.offsetY
+        };
+        
+        // Show selection box at start point
+        selectionBox.style.left = `${dragStart.x}px`;
+        selectionBox.style.top = `${dragStart.y}px`;
+        selectionBox.style.width = '0';
+        selectionBox.style.height = '0';
+        selectionBox.style.display = 'block';
+    } else if (e.button === 2) { // Right click
+        const clickX = e.offsetX;
+        const clickY = e.offsetY;
+        
+        // Find and remove hold that was clicked
+        for (let i = currentHolds.length - 1; i >= 0; i--) {
+            const hold = currentHolds[i];
+            const [x1, y1, x2, y2] = hold.bbox;
+            if (clickX >= x1 && clickX <= x2 && clickY >= y1 && clickY <= y2) {
+                undoStack.push([...currentHolds]);
+                currentHolds.splice(i, 1);
+                updateHoldOverlay();
+                break;
+            }
+        }
+    }
+});
+
+holdOverlay.addEventListener('mousemove', (e) => {
+    if (isPanning && lastPanPoint) {
+        const dx = e.clientX - lastPanPoint.x;
+        const dy = e.clientY - lastPanPoint.y;
+        translateX += dx;
+        translateY += dy;
+        imageWrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        lastPanPoint = { x: e.clientX, y: e.clientY };
+        return;
+    }
+
+    if (isDragging) {
+        const currentX = e.offsetX;
+        const currentY = e.offsetY;
+        
+        const width = currentX - dragStart.x;
+        const height = currentY - dragStart.y;
+        
+        selectionBox.style.width = `${Math.abs(width)}px`;
+        selectionBox.style.height = `${Math.abs(height)}px`;
+        selectionBox.style.left = `${width < 0 ? currentX : dragStart.x}px`;
+        selectionBox.style.top = `${height < 0 ? currentY : dragStart.y}px`;
+    }
+});
+
+holdOverlay.addEventListener('mouseup', (e) => {
+    if (isPanning) {
+        isPanning = false;
+        lastPanPoint = null;
+        return;
+    }
+
+    if (isDragging) {
+        const endX = e.offsetX;
+        const endY = e.offsetY;
+        
+        if (Math.abs(endX - dragStart.x) < 5 && Math.abs(endY - dragStart.y) < 5) {
+            // Treat as a click - add a hold at the click point
+            undoStack.push([...currentHolds]);
+            currentHolds.push({
+                center: [endX, endY],
+                bbox: [endX - 10, endY - 10, endX + 10, endY + 10],
+                confidence: 1.0,
+                color: 'gray'
+            });
+        } else {
+            // Add hold with the drawn box
+            const x1 = Math.min(dragStart.x, endX);
+            const y1 = Math.min(dragStart.y, endY);
+            const x2 = Math.max(dragStart.x, endX);
+            const y2 = Math.max(dragStart.y, endY);
+            
+            undoStack.push([...currentHolds]);
+            currentHolds.push({
+                center: [(x1 + x2) / 2, (y1 + y2) / 2],
+                bbox: [x1, y1, x2, y2],
+                confidence: 1.0,
+                color: 'gray'
+            });
+        }
+        
+        updateHoldOverlay();
+        isDragging = false;
+        selectionBox.style.display = 'none';
+    }
+});
+
+holdOverlay.addEventListener('wheel', (e) => {
+    if (e.shiftKey) {
+        e.preventDefault();
+        const scaleChange = e.deltaY > 0 ? 0.9 : 1.1;
+        scale *= scaleChange;
+        
+        // Get mouse position relative to image wrapper
+        const rect = imageWrapper.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left - translateX;
+        const mouseY = e.clientY - rect.top - translateY;
+        
+        // Adjust translation to zoom around mouse point
+        translateX -= mouseX * (scaleChange - 1);
+        translateY -= mouseY * (scaleChange - 1);
+        
+        imageWrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+    }
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'z' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+        if (undoStack.length > 0) {
+            currentHolds = undoStack.pop();
+            updateHoldOverlay();
+        }
+    } else if (e.key === 'Enter') {
+        finalizeScan();
+    }
+});
+
+// Prevent context menu on right click
+holdOverlay.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+});
+
+async function finalizeScan() {
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const errorMessage = document.getElementById('errorMessage');
+    const reviewSection = document.getElementById('reviewSection');
+    const results = document.getElementById('results');
+    const processedImage = document.getElementById('processedImage');
+    const createRouteBtn = document.getElementById('createRouteBtn');
+
+    loadingSpinner.style.display = 'block';
+    errorMessage.textContent = '';
+
+    try {
+        const response = await axios.post('/scan/finalize', {
+            scan_id: currentScanId,
+            holds: currentHolds
+        });
+        
+        processedImage.src = response.data.grid_jpg_path;
+        createRouteBtn.href = `/routes/create?grid_jpg_path=${encodeURIComponent(response.data.grid_jpg_path)}`;
+        reviewSection.style.display = 'none';
+        results.style.display = 'block';
+    } catch (error) {
+        errorMessage.textContent = error.response?.data?.error || 'An error occurred while finalizing the process';
+    } finally {
+        loadingSpinner.style.display = 'none';
+    }
+}
+</script>
+
+<style>
+.wall-container {
+    position: relative;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    overflow: hidden;
+}
+
+#imageWrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.wall-image {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.hold-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: all;
+}
+
+.hold {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: blue;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.hold-box {
+    position: absolute;
+    border: 1px solid green;
+    pointer-events: none;
+}
+
+#selectionBox {
+    background-color: rgba(255, 0, 0, 0.2);
+}
+</style>
+{% endblock %} 
