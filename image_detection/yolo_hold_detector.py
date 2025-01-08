@@ -96,10 +96,6 @@ class YOLOHoldDetector:
             # Draw center point
             cv2.circle(result, hold.center, 3, color, -1)
             
-            # Draw confidence score
-            text = f"{hold.color} ({hold.confidence:.2f})"
-            cv2.putText(result, text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-        
         return result 
     
     def _apply_nms(self, holds: List[Hold]) -> List[Hold]:
