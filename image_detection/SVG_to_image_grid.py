@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 def get_original_image_dimensions(svg_path):
     """Get dimensions from the original image file."""
-    original_path = svg_path.replace('/holds_detected/', '/images/').replace('.svg', '.jpg')
+    original_path = svg_path.replace('output/svg/', 'image_detection/images/').replace('.svg', '.jpg')
     try:
         with Image.open(original_path) as img:
             return img.size, original_path
@@ -293,7 +293,7 @@ def get_hold_positions_from_svg(svg_root):
     return np.array(hold_positions)
 
 
-def infer_grid_from_holds(hold_positions, debug=False):
+def infer_grid_from_holds(hold_positions, debug=False, base_name="unknown"):
     """
     Infer grid parameters from hold positions, using known 40x8 grid pattern.
     Uses clustering of distances to find common spacings.
@@ -355,10 +355,12 @@ def infer_grid_from_holds(hold_positions, debug=False):
         plt.title('Hold Positions and Standard 40x8 Grid')
         
         # Save visualization
-        debug_path = 'grid_visualization.png'
+        debug_dir = os.path.join(os.getcwd(), 'output', 'debug_visualizations')
+        os.makedirs(debug_dir, exist_ok=True)
+        debug_path = os.path.join(debug_dir, f"{base_name}_grid_inference.png")
         plt.savefig(debug_path, bbox_inches='tight', dpi=300)
         plt.close()
-        print(f"Saved grid visualization to: {debug_path}")
+        print(f"Saved grid inference visualization to: {debug_path}")
         
         # Also plot histograms of distances
         plt.figure(figsize=(12, 4))
@@ -373,9 +375,10 @@ def infer_grid_from_holds(hold_positions, debug=False):
         plt.axvline(grid_spacing_y, color='r', linestyle='--')
         
         plt.tight_layout()
-        plt.savefig('distance_distributions.png')
+        dist_path = os.path.join(debug_dir, f"{base_name}_grid_inference_distributions.png")
+        plt.savefig(dist_path)
         plt.close()
-        print(f"Saved distance distributions to: distance_distributions.png")
+        print(f"Saved grid inference distributions to: {dist_path}")
     
     return grid_params
 
@@ -577,11 +580,32 @@ def convert_svg_to_jpeg_grid(svg_path, output_jpg_path, output_svg_path, debug=F
             plt.ylim(-10, height + 10)
             
             # Save visualization
-            debug_path = 'grid_visualization.png'
+            base_name = os.path.splitext(os.path.basename(svg_path))[0]
+            debug_dir = os.path.join(os.path.dirname(os.path.dirname(svg_path)), 'debug_visualizations')
+            os.makedirs(debug_dir, exist_ok=True)
+            debug_path = os.path.join(debug_dir, f"{base_name}_grid_visualization.png")
             plt.savefig(debug_path, bbox_inches='tight', dpi=300)
             plt.close()
             print(f"Saved grid visualization to: {debug_path}")
-        
+            
+            # Also save distance distributions
+            plt.figure(figsize=(12, 4))
+            plt.subplot(121)
+            plt.hist(np.diff(x_grid), bins=20)
+            plt.title('X Grid Spacing')
+            plt.axvline(grid_params['spacing_x'], color='r', linestyle='--')
+            
+            plt.subplot(122)
+            plt.hist(np.diff(y_grid), bins=20)
+            plt.title('Y Grid Spacing')
+            plt.axvline(grid_params['spacing_y'], color='r', linestyle='--')
+            
+            plt.tight_layout()
+            dist_path = os.path.join(debug_dir, f"{base_name}_distance_distributions.png")
+            plt.savefig(dist_path)
+            plt.close()
+            print(f"Saved distance distributions to: {dist_path}")
+
         # Save the grid-aligned SVG
         try:
             os.makedirs(os.path.dirname(output_svg_path), exist_ok=True)
@@ -618,17 +642,17 @@ def convert_svg_to_jpeg_grid(svg_path, output_jpg_path, output_svg_path, debug=F
 
 def main():
     # Directory containing SVG files
-    svg_dir = os.path.join(os.path.dirname(__file__), '../image_detection/holds_detected')
+    svg_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'output/svg')
 
     # Ensure the output directories exist
-    output_jpg_dir = os.path.join(svg_dir, 'converted_jpegs_grid')
-    output_svg_dir = os.path.join(svg_dir, 'grid_svgs')
+    output_jpg_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'output/grid')
+    output_svg_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'output/svg/grid')
     os.makedirs(output_jpg_dir, exist_ok=True)
     os.makedirs(output_svg_dir, exist_ok=True)
 
     # Convert each SVG file in the directory
     for file_name in os.listdir(svg_dir):
-        if file_name.endswith('.svg'):
+        if file_name.endswith('.svg') and not file_name.endswith('_grid.svg'):
             svg_path = os.path.join(svg_dir, file_name)
             base_name = file_name.replace('.svg', '')
             output_jpg_path = os.path.join(output_jpg_dir, f"converted_grid_{base_name}.jpg")

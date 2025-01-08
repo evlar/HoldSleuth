@@ -1,44 +1,55 @@
 import cv2
 import os
-from image_detection.yolo_hold_detector import YOLOHoldDetector
-from image_detection.sam_blob_extractor import SAMBlobExtractor
+from image_detection.wall_scanner import process_image
 
 def main():
-    # Initialize detectors
-    yolo_detector = YOLOHoldDetector()
-    sam_extractor = SAMBlobExtractor()
+    """Example script demonstrating the complete hold detection pipeline."""
+    # Get paths
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+    image_dir = os.path.join(project_root, 'image_detection', 'images')
+    
+    # Ensure output directories exist
+    output_dirs = [
+        os.path.join(project_root, 'output', dir_name)
+        for dir_name in ['raw_detections', 'svg', 'jpeg', 'grid', 'debug_visualizations']
+    ]
+    for dir_path in output_dirs:
+        os.makedirs(dir_path, exist_ok=True)
 
-    # Load an image
-    image_path = os.path.join('data', 'sample_wall.jpg')  # You'll need to add your own image
+    # Example image path - you'll need to add your own image
+    image_path = os.path.join(image_dir, 'example.jpg')  # Using the default example image
     if not os.path.exists(image_path):
-        print(f"Please add a sample image at {image_path}")
+        print(f"Please add an image at {image_path}")
+        print("You can use any climbing wall image, preferably with visible holds")
         return
 
-    # Read and process image
-    image = cv2.imread(image_path)
-    if image is None:
-        print("Failed to load image")
-        return
-
-    # Detect holds
-    holds = yolo_detector.detect_holds(image)
-    print(f"Detected {len(holds)} holds")
-
-    # Draw hold detections
-    hold_viz = yolo_detector.draw_holds(image, holds)
-    cv2.imwrite(os.path.join('data', 'detected_holds.jpg'), hold_viz)
-
-    # Extract precise shapes
-    blobs = sam_extractor.extract_blobs(image, holds)
-    print(f"Extracted {len(blobs)} precise hold shapes")
-
-    # Draw blob visualization
-    blob_viz = sam_extractor.draw_blobs(image, blobs)
-    cv2.imwrite(os.path.join('data', 'extracted_blobs.jpg'), blob_viz)
-
-    # Create mask visualization
-    mask_viz = sam_extractor.create_mask_visualization(image, blobs)
-    cv2.imwrite(os.path.join('data', 'hold_masks.jpg'), mask_viz)
+    print("Starting hold detection pipeline...")
+    print(f"Processing image: {image_path}")
+    
+    try:
+        # Process the image - this will:
+        # 1. Detect holds using YOLO
+        # 2. Extract precise shapes using SAM
+        # 3. Save detection visualization to output/raw_detections/
+        # 4. Save SVG to output/svg/
+        blobs, detection_img = process_image(
+            image_path,
+            confidence_threshold=0.25,  # Standard confidence threshold
+            nms_iou_threshold=0.4       # Standard NMS threshold
+        )
+        
+        print("\nProcessing complete!")
+        print(f"Found {len(blobs)} holds")
+        print("\nOutput files have been saved to:")
+        print("- Raw detections: output/raw_detections/")
+        print("- SVG files: output/svg/")
+        print("- JPEG conversions: output/jpeg/")
+        print("- Grid-aligned files: output/grid/")
+        print("- Debug visualizations: output/debug_visualizations/")
+        
+    except Exception as e:
+        print(f"Error processing image: {e}")
 
 if __name__ == '__main__':
     main() 

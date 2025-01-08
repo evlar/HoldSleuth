@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 def get_original_image_dimensions(svg_path):
     """Get dimensions from the original image file."""
     # Get the original image path by converting the SVG path
-    original_path = svg_path.replace('/holds_detected/', '/images/').replace('.svg', '.jpg')
+    original_path = svg_path.replace('output/svg/', 'image_detection/images/').replace('.svg', '.jpg')
     try:
         with Image.open(original_path) as img:
             return img.size
@@ -93,10 +93,10 @@ def convert_svg_to_jpeg(svg_path, output_path):
 
 def main():
     # Directory containing SVG files
-    svg_dir = os.path.join(os.path.dirname(__file__), '../image_detection/holds_detected')
+    svg_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'output/svg')
 
     # Ensure the output directory exists
-    output_dir = os.path.join(svg_dir, 'converted_jpegs')
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'output/jpeg')
     os.makedirs(output_dir, exist_ok=True)
 
     # Convert each SVG file in the directory

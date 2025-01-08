@@ -34,8 +34,8 @@ def select_image(images):
         except ValueError:
             print("Please enter a valid number.")
 
-def process_image(image_path, confidence_threshold=0.25, nms_iou_threshold=0.45):
-    """Process an image to detect holds using YOLO and SAM."""
+def process_image(image_path, confidence_threshold=0.05, nms_iou_threshold=0.4, model_path=None, device=None):
+    """Process an image and return detected holds."""
     # Load image
     image = cv2.imread(image_path)
     if image is None:
@@ -76,13 +76,25 @@ def process_image(image_path, confidence_threshold=0.25, nms_iou_threshold=0.45)
     # Create visualization
     result_image = blob_extractor.draw_blobs(image, blobs)
     
-    # Save visualization
+    # Save detection visualization
     base_name = os.path.splitext(os.path.basename(image_path))[0]
-    output_image_path = os.path.join(os.path.dirname(image_path), f"{base_name}_detected.jpg")
-    cv2.imwrite(output_image_path, result_image)
-    print(f"Saved visualization to: {output_image_path}")
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'output')
     
-    return blobs
+    # Create output directories if they don't exist
+    raw_dir = os.path.join(output_dir, 'raw_detections')
+    svg_dir = os.path.join(output_dir, 'svg')
+    os.makedirs(raw_dir, exist_ok=True)
+    os.makedirs(svg_dir, exist_ok=True)
+    
+    # Save detection visualization
+    detection_path = os.path.join(raw_dir, f"{base_name}_detected.jpg")
+    cv2.imwrite(detection_path, result_image)
+    
+    # Save SVG
+    svg_path = os.path.join(svg_dir, f"{base_name}.svg")
+    save_as_svg(blobs, svg_path)
+    
+    return blobs, result_image
 
 def save_as_svg(blobs, output_path):
     """Save the detected holds as an SVG file."""
@@ -362,10 +374,7 @@ def main():
     # Get the absolute paths for the directories
     current_dir = os.path.dirname(os.path.abspath(__file__))
     image_dir = os.path.join(current_dir, "images")
-    holds_detected_dir = os.path.join(current_dir, "holds_detected")
-    
-    # Ensure the holds_detected directory exists
-    os.makedirs(holds_detected_dir, exist_ok=True)
+    output_dir = os.path.join(os.path.dirname(current_dir), "output")
     
     # List and select image
     images = list_images(image_dir)
@@ -379,19 +388,12 @@ def main():
     print(f"\nProcessing image: {selected_image}")
     
     try:
-        # Process the image with slightly adjusted thresholds
-        # Lower confidence threshold to catch more holds
-        # Stricter NMS threshold to better handle overlaps
-        blobs = process_image(
+        # Process the image with default thresholds
+        blobs, detection_img = process_image(
             image_path,
-            confidence_threshold=0.05,  # Lower threshold to catch more holds
-            nms_iou_threshold=0.4      # Stricter NMS to better handle overlaps
+            confidence_threshold=0.25,  # Standard confidence threshold
+            nms_iou_threshold=0.4       # Standard NMS threshold
         )
-        
-        # Save the results as SVG
-        base_name = os.path.splitext(selected_image)[0]
-        svg_path = os.path.join(holds_detected_dir, f"{base_name}.svg")
-        save_as_svg(blobs, svg_path)
         
     except Exception as e:
         print(f"Error processing image: {e}")

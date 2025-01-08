@@ -108,10 +108,12 @@ dmypy.json
 cython_debug/
 
 # Project specific
-models/
-*.pth
+output/raw_detections/
+output/svg/
+output/jpeg/
+output/grid/
+!models/yolov8n.pt
 image_detection/model/
-image_detection/holds_detected/
 image_detection/images/
 *.jpg
 *.jpeg
