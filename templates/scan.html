@@ -106,11 +106,19 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         const response = await axios.post('/scan', formData);
         currentScanId = response.data.scan_id;
         currentHolds = response.data.holds;
-        detectionImage.src = response.data.detection_path;
+        
+        // Load the YOLO detection image
         detectionImage.onload = () => {
             updateHoldOverlay();
             reviewSection.style.display = 'block';
+            // Reset transform when showing new image
+            scale = 1;
+            translateX = 0;
+            translateY = 0;
+            imageWrapper.style.transform = `translate(0px, 0px) scale(1)`;
         };
+        detectionImage.src = '/' + response.data.detection_path;
+        
     } catch (error) {
         errorMessage.textContent = error.response?.data?.error || 'An error occurred while processing the image';
     } finally {
@@ -307,7 +315,7 @@ async function finalizeScan() {
             holds: currentHolds
         });
         
-        processedImage.src = response.data.grid_jpg_path;
+        processedImage.src = '/' + response.data.grid_jpg_path;
         createRouteBtn.href = `/routes/create?grid_jpg_path=${encodeURIComponent(response.data.grid_jpg_path)}`;
         reviewSection.style.display = 'none';
         results.style.display = 'block';
@@ -360,12 +368,13 @@ async function finalizeScan() {
 
 .hold-box {
     position: absolute;
-    border: 1px solid green;
+    border: 2px solid green;
     pointer-events: none;
 }
 
 #selectionBox {
     background-color: rgba(255, 0, 0, 0.2);
+    border: 2px dashed red;
 }
 </style>
 {% endblock %} 
