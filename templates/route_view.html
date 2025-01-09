@@ -30,13 +30,14 @@
     <div class="col-md-8">
         <!-- Route Visualization -->
         <div class="card mb-4">
-            <div class="card-body">
-                <div class="wall-container">
-                    <div class="wall-scroller">
+            <div class="card-body d-flex flex-column">
+                <div class="wall-container flex-grow-1">
+                    <div id="wallScroller" class="wall-scroller">
                         <!-- SVG wall with holds -->
                         {{ wall_svg|safe }}
                     </div>
                 </div>
+                <p class="text-muted mt-2">Hold SHIFT and drag to scroll through the wall.</p>
             </div>
         </div>
     </div>
@@ -80,20 +81,29 @@
 .wall-container {
     position: relative;
     width: 100%;
-    height: 60vh;
+    height: 50vh;
     background-color: #ffffff;
     border: 1px solid #dee2e6;
     border-radius: 4px;
-    overflow: hidden;
+    overflow-y: scroll;
+    overflow-x: hidden;
 }
 
 .wall-scroller {
     position: relative;
     width: 100%;
-    height: 100%;
+    transform-origin: top center;
+    display: flex;
+    flex-direction: column;
 }
 
-.wall-scroller svg {
+.wall-segment {
+    width: 100%;
+    height: 100vh;
+    flex-shrink: 0;
+}
+
+.wall-segment svg {
     width: 100%;
     height: 100%;
     background-color: #ffffff;
@@ -105,6 +115,7 @@
     stroke: #000000;
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
+    transition: fill 0.2s ease-out;
 }
 
 .wall-scroller polygon[data-type="start"] {
@@ -151,38 +162,106 @@
 <script>
 // Initialize the route visualization
 document.addEventListener('DOMContentLoaded', function() {
+    const NUM_SEGMENTS = 10;
+    let isPanning = false;
+    let startY = 0;
+    let startScroll = 0;
+    
+    // Parse route holds data
     var routeHolds = JSON.parse('{{ route.holds|tojson|safe }}');
-    var wallScroller = document.querySelector('.wall-scroller');
-    var originalSvg = wallScroller.querySelector('svg');
+    console.log('Route holds:', routeHolds);
+    
+    // Get the original SVG content
+    var wallScroller = document.getElementById('wallScroller');
+    var originalSvgContent = wallScroller.innerHTML;
     wallScroller.innerHTML = ''; // Clear the container
-
-    // Create multiple wall segments
-    for (var i = 10; i >= 0; i--) {
-        var svg = originalSvg.cloneNode(true);
-        svg.dataset.cycle = i.toString();
-        wallScroller.appendChild(svg);
+    
+    // Create temporary div to parse SVG content
+    var tempDiv = document.createElement('div');
+    tempDiv.innerHTML = originalSvgContent;
+    var originalSvg = tempDiv.querySelector('svg');
+    
+    if (!originalSvg) {
+        console.error('No SVG found in wall-scroller');
+        return;
     }
 
-    // Mark holds on the SVG
-    routeHolds.forEach(function(hold) {
-        // Find the corresponding SVG segment
-        var svg = wallScroller.querySelector('svg[data-cycle="' + hold.segment + '"]');
-        if (!svg) return;
-
-        // Find all polygons in this segment
-        var polygons = Array.from(svg.querySelectorAll('polygon'));
+    // Create multiple wall segments
+    for (let i = NUM_SEGMENTS - 1; i >= 0; i--) {
+        // Create a new segment container
+        const segmentDiv = document.createElement('div');
+        segmentDiv.className = 'wall-segment';
+        segmentDiv.innerHTML = originalSvgContent;
         
-        // Find the matching polygon based on x and y coordinates
-        var polygon = polygons.find(function(p) {
-            var points = p.getAttribute('points').split(' ')[0].split(',');
-            var x = Math.round(parseFloat(points[0]) / 100); // Convert SVG x to grid x
-            var y = Math.round(parseFloat(points[1]) / 100); // Convert SVG y to grid y
-            return x === hold.x && y === hold.y;
-        });
-
-        if (polygon) {
-            polygon.dataset.type = hold.type;
+        // Get the SVG in this segment
+        const svg = segmentDiv.querySelector('svg');
+        if (!svg) {
+            console.error(`No SVG found in segment ${i}`);
+            continue;
         }
+        
+        svg.dataset.cycle = i.toString();
+        
+        // Process all polygons in this segment
+        const polygons = svg.querySelectorAll('polygon');
+        
+        polygons.forEach((polygon) => {
+            // Get grid coordinates directly from data attributes
+            const x = parseInt(polygon.dataset.gridX);
+            const y = parseInt(polygon.dataset.gridY);
+            
+            // Check if this polygon matches any hold in this segment
+            const matchingHold = routeHolds.find(hold => {
+                const matches = hold.segment === i && 
+                              hold.x === x && 
+                              hold.y === y;
+                if (matches) {
+                    console.log(`Found matching hold:`, hold, `for polygon at x:${x}, y:${y}, segment:${i}`);
+                }
+                return matches;
+            });
+            
+            if (matchingHold) {
+                polygon.dataset.type = matchingHold.type;
+                console.log(`Set hold type ${matchingHold.type} at x:${x}, y:${y}, segment:${i}`);
+            }
+        });
+        
+        wallScroller.appendChild(segmentDiv);
+    }
+
+    // Set the wall scroller height
+    wallScroller.style.height = `${NUM_SEGMENTS * 100}%`;
+
+    // Scroll to bottom initially
+    requestAnimationFrame(() => {
+        const container = wallScroller.parentElement;
+        container.scrollTop = container.scrollHeight;
+    });
+
+    // Handle panning with shift+click and drag
+    wallScroller.addEventListener('mousedown', (e) => {
+        if (e.shiftKey) {
+            isPanning = true;
+            startY = e.clientY;
+            startScroll = wallScroller.parentElement.scrollTop;
+            wallScroller.style.cursor = 'ns-resize';
+            e.preventDefault();
+        }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        
+        const deltaY = e.clientY - startY;
+        const newScroll = startScroll - deltaY;
+        wallScroller.parentElement.scrollTop = newScroll;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!isPanning) return;
+        isPanning = false;
+        wallScroller.style.cursor = 'default';
     });
 });
 </script>
