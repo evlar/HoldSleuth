@@ -34,8 +34,8 @@ Routes are saved as JSON files with a specific structure to ensure compatibility
     "holds": [
         {
             "x": 3,             // Column (0-7)
-            "y": 5,             // Row within segment (0-39)
-            "segment": 0,       // Wall segment number (0 = bottom)
+            "y": 5.5,           // Vertical position (can be any positive float)
+            "segment": 0,       // Segment number, starting from 0
             "type": "start"     // One of: "start", "foot", "regular", "finish"
         }
     ]
@@ -50,15 +50,16 @@ Routes are saved as JSON files with a specific structure to ensure compatibility
 - **Created At:** The timestamp when the route was created, in ISO 8601 format.
 - **Holds:** A list of hold objects, each specifying:
   - `x`: The column position (0-7).
-  - `y`: The row position within a segment (0-39).
-  - `segment`: The wall segment number (0 = bottom segment).
+  - `y`: The vertical position, which can be any positive float.
+  - `segment`: The segment number, starting from 0.
   - `type`: The type of hold, which can be "start", "foot", "regular", or "finish".
 
 ### Coordinate System
 
 - **Horizontal (X) Position:** Uses zero-based indexing (0-7) and maps directly to the SVG's `data-grid-x` value.
-- **Vertical (Y) Position:** Zero (0) represents the bottom of a wall segment, with values ranging from 0 to 39.
-- **Segment:** Represents which wall segment the hold is on, with 0 being the bottom segment.
+- **Vertical (Y) Position:** Zero (0.0) represents the bottom of the initial wall position, with one full wall height being 40 units. For holds beyond the first rotation, the y-coordinate is calculated as `base_position + (rotation_number * 40)`.
+- **Segment:** The treadwall is conceptualized as a series of segments, each with 40 rows and 8 columns. Segment 0 is at the bottom, and segments stack on top as the wall rotates.
+- **Physical Spacing:** The actual t-nuts on the treadwall are spaced 6 inches apart vertically and 8 inches apart horizontally. This spacing is crucial for accurate projection and alignment of the holds.
 
 ### Validation Rules
 
@@ -66,9 +67,8 @@ A valid route must have:
 1. At least one "start" hold.
 2. At least one "finish" hold.
 3. All x values must be integers 0-7.
-4. All y values must be integers 0-39.
-5. All segment values must be non-negative integers.
-6. All hold types must be one of the four specified types.
+4. All y values must be positive floats.
+5. All hold types must be one of the four specified types.
 
 ### Example Route
 
@@ -79,23 +79,22 @@ A valid route must have:
     "author": "John Climber",
     "created_at": "2024-03-19T10:30:00Z",
     "holds": [
-        {"x": 3, "y": 5, "segment": 0, "type": "start"},
-        {"x": 4, "y": 5, "segment": 0, "type": "start"},
-        {"x": 2, "y": 25, "segment": 0, "type": "foot"},
-        {"x": 5, "y": 15, "segment": 1, "type": "regular"},
-        {"x": 3, "y": 25, "segment": 1, "type": "regular"},
-        {"x": 4, "y": 35, "segment": 1, "type": "regular"},
-        {"x": 2, "y": 5, "segment": 2, "type": "finish"}
+        {"x": 3, "y": 5.0, "segment": 0, "type": "start"},
+        {"x": 4, "y": 5.0, "segment": 0, "type": "start"},
+        {"x": 2, "y": 6.5, "segment": 0, "type": "foot"},
+        {"x": 5, "y": 15.75, "segment": 0, "type": "regular"},
+        {"x": 3, "y": 25.5, "segment": 0, "type": "regular"},
+        {"x": 4, "y": 35.25, "segment": 0, "type": "regular"},
+        {"x": 2, "y": 45.0, "segment": 1, "type": "finish"}
     ]
 }
 ```
 
 ### Implementation Notes
 
-- The projection system handles mapping between segments automatically.
-- Each wall segment is 40 units high.
-- Y coordinates are always relative to the current segment.
-- Coordinates should be integers for precise hold placement.
+- The projection system automatically handles the wrapping of y-coordinates to the physical wall height based on the current wall position.
+- Routes can span any number of rotations, with no upper limit on y values.
+- Coordinates should be saved with at least 2 decimal places of precision for accurate hold placement.
 - The web interface should validate routes before saving to ensure they meet these specifications.
 
 ### References
