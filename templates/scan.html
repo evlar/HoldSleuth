@@ -14,33 +14,40 @@
     <div class="col-md-12">
         <div class="card">
             <div class="card-body">
-                <form id="uploadForm" class="mb-4">
-                    <div class="mb-3">
-                        <label for="wallImage" class="form-label">Wall Photo</label>
-                        <input type="file" class="form-control" id="wallImage" accept=".jpg,.jpeg,.png" required>
-                        <div class="form-text">Upload a clear, well-lit photo of your treadwall.</div>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Process Image</button>
-                </form>
+                <!-- Initial upload form -->
+                <div id="uploadSection">
+                    <form id="uploadForm" class="mb-4">
+                        <div class="mb-3">
+                            <label for="wallImage" class="form-label">Wall Photo</label>
+                            <input type="file" class="form-control" id="wallImage" accept=".jpg,.jpeg,.png" required>
+                            <div class="form-text">Upload a clear, well-lit photo of your treadwall.</div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Process Image</button>
+                    </form>
+                </div>
 
-                <div id="loadingSpinner" class="loading-spinner">
+                <!-- Loading spinner -->
+                <div id="loadingSpinner" class="loading-spinner" style="display: none;">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <p class="mt-2">Processing image... This may take a few moments.</p>
                 </div>
 
+                <!-- Error messages -->
                 <div id="errorMessage" class="error-message"></div>
 
+                <!-- YOLO Detection Review Section -->
                 <div id="reviewSection" style="display: none;">
-                    <h4 class="mb-3">Review Detections</h4>
-                    <p>
-                        Left click: place t-nut<br>
-                        Left click+drag: draw box<br>
-                        Right-click: remove detection<br>
-                        Z: undo<br>
-                        Enter: done<br>
-                        Hold Shift: mouse wheel to zoom, click+drag to pan
+                    <h4 class="mb-3">Review Initial Detections</h4>
+                    <p class="text-muted mb-3">
+                        Review and edit the detected holds before final processing:<br>
+                        • Left click: place t-nut<br>
+                        • Left click+drag: draw box<br>
+                        • Right-click: remove detection<br>
+                        • Z: undo<br>
+                        • Enter: proceed with final processing<br>
+                        • Hold Shift: mouse wheel to zoom, click+drag to pan
                     </p>
                     <div class="wall-container" style="overflow: hidden;">
                         <div id="imageWrapper" style="transform-origin: 0 0;">
@@ -52,6 +59,7 @@
                     </div>
                 </div>
 
+                <!-- Final Results Section -->
                 <div id="results" style="display: none;">
                     <h4 class="mb-3">Final Results</h4>
                     <div class="wall-container">
@@ -96,31 +104,35 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     const reviewSection = document.getElementById('reviewSection');
     const results = document.getElementById('results');
     const detectionImage = document.getElementById('detectionImage');
+    const uploadSection = document.getElementById('uploadSection');
 
     loadingSpinner.style.display = 'block';
     errorMessage.textContent = '';
     reviewSection.style.display = 'none';
     results.style.display = 'none';
+    uploadSection.style.display = 'none';
 
     try {
         const response = await axios.post('/scan', formData);
         currentScanId = response.data.scan_id;
         currentHolds = response.data.holds;
         
-        // Load the YOLO detection image
-        detectionImage.onload = () => {
-            updateHoldOverlay();
-            reviewSection.style.display = 'block';
-            // Reset transform when showing new image
-            scale = 1;
-            translateX = 0;
-            translateY = 0;
-            imageWrapper.style.transform = `translate(0px, 0px) scale(1)`;
-        };
-        detectionImage.src = '/' + response.data.detection_path;
+        // Load the detection image and wait for it
+        detectionImage.src = response.data.detection_path;
+        await new Promise((resolve, reject) => {
+            detectionImage.onload = resolve;
+            detectionImage.onerror = reject;
+        });
         
+        // Show the review section
+        reviewSection.style.display = 'block';
+        updateHoldOverlay();
+        
+        // Focus the review section for keyboard controls
+        reviewSection.focus();
     } catch (error) {
         errorMessage.textContent = error.response?.data?.error || 'An error occurred while processing the image';
+        uploadSection.style.display = 'block';
     } finally {
         loadingSpinner.style.display = 'none';
     }
@@ -133,13 +145,14 @@ function updateHoldOverlay() {
     holdOverlay.appendChild(selectionBox);
     
     currentHolds.forEach((hold, index) => {
+        // Create center point
         const holdElement = document.createElement('div');
         holdElement.className = 'hold hold-regular';
         holdElement.style.left = `${hold.center[0]}px`;
         holdElement.style.top = `${hold.center[1]}px`;
         holdElement.dataset.index = index;
         
-        // Create bounding box visualization
+        // Create bounding box
         const boxElement = document.createElement('div');
         boxElement.className = 'hold-box';
         boxElement.style.left = `${hold.bbox[0]}px`;
@@ -315,7 +328,7 @@ async function finalizeScan() {
             holds: currentHolds
         });
         
-        processedImage.src = '/' + response.data.grid_jpg_path;
+        processedImage.src = response.data.grid_jpg_path;
         createRouteBtn.href = `/routes/create?grid_jpg_path=${encodeURIComponent(response.data.grid_jpg_path)}`;
         reviewSection.style.display = 'none';
         results.style.display = 'block';
@@ -334,6 +347,9 @@ async function finalizeScan() {
     max-width: 1200px;
     margin: 0 auto;
     overflow: hidden;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
 }
 
 #imageWrapper {
@@ -361,7 +377,7 @@ async function finalizeScan() {
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background-color: blue;
+    background-color: red;
     transform: translate(-50%, -50%);
     pointer-events: none;
 }
@@ -375,6 +391,10 @@ async function finalizeScan() {
 #selectionBox {
     background-color: rgba(255, 0, 0, 0.2);
     border: 2px dashed red;
+}
+
+.text-muted {
+    color: #6c757d;
 }
 </style>
 {% endblock %} 
