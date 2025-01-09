@@ -223,7 +223,7 @@ def route_create():
         print(wall_svg[:1000])
     
     # Get available grades
-    grades = ['5.6', '5.7', '5.8', '5.9', '5.10a', '5.10b', '5.10c', '5.10d', 
+    grades = ['Unknown', '5.6', '5.7', '5.8', '5.9', '5.10a', '5.10b', '5.10c', '5.10d', 
              '5.11a', '5.11b', '5.11c', '5.11d', '5.12a', '5.12b', '5.12c', '5.12d']
     
     return render_template('route_create.html', 
@@ -282,7 +282,7 @@ def route_edit(route_id):
             )
         
         # Get available grades
-        grades = ['5.6', '5.7', '5.8', '5.9', '5.10a', '5.10b', '5.10c', '5.10d', 
+        grades = ['Unknown', '5.6', '5.7', '5.8', '5.9', '5.10a', '5.10b', '5.10c', '5.10d', 
                  '5.11a', '5.11b', '5.11c', '5.11d', '5.12a', '5.12b', '5.12c', '5.12d']
         
         return render_template('route_edit.html', 

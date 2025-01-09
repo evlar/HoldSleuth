@@ -82,7 +82,7 @@
                     <div class="mb-3">
                         <label for="routeGrade" class="form-label">Grade</label>
                         <select class="form-select" id="routeGrade" name="grade">
-                            <option value="">Select Grade</option>
+                            <option value="">Grade (can be set later)</option>
                             {% for grade in grades %}
                             <option value="{{ grade }}" 
                                     {{ 'selected' if route.grade == grade else '' }}>
