@@ -31,22 +31,22 @@
                 <div class="d-flex gap-3 align-items-center">
                     <div class="hold-type">
                         <span class="hold-color" style="background-color: #28a745"></span>
-                        <span style="color: #28a745; font-weight: 500">Start Hold</span>
-                    </div>
-                    <div class="hold-type">
-                        <span class="hold-color" style="background-color: #0d6efd"></span>
-                        <span style="color: #0d6efd; font-weight: 500">Regular Hold</span>
+                        Start Hold
                     </div>
                     <div class="hold-type">
                         <span class="hold-color" style="background-color: #ffc107"></span>
-                        <span style="color: #946800; font-weight: 500">Foot Hold</span>
+                        Foot Hold
+                    </div>
+                    <div class="hold-type">
+                        <span class="hold-color" style="background-color: #0d6efd"></span>
+                        Regular Hold
                     </div>
                     <div class="hold-type">
                         <span class="hold-color" style="background-color: #6f42c1"></span>
-                        <span style="color: #6f42c1; font-weight: 500">Finish Hold</span>
+                        Finish Hold
                     </div>
                 </div>
-                <p class="text-muted mt-2">Click holds to cycle through types.</p>
+                <p class="text-muted mt-2">Hold SHIFT and drag to scroll. Click holds to cycle through types.</p>
             </div>
         </div>
     </div>
@@ -139,26 +139,26 @@
     transform: scale(1.02);
 }
 
-.wall-scroller polygon[data-type="regular"] {
-    fill: #0d6efd !important; /* blue */
+.wall-scroller polygon[data-type="start"] {
+    fill: #28a745 !important;  /* Green - Start Hold */
     stroke: #000000;
     fill-opacity: 0.9;
 }
 
 .wall-scroller polygon[data-type="foot"] {
-    fill: #ffc107 !important; /* yellow */
+    fill: #ffc107 !important;  /* Yellow - Foot Hold */
     stroke: #000000;
     fill-opacity: 0.9;
 }
 
-.wall-scroller polygon[data-type="start"] {
-    fill: #28a745 !important; /* green */
+.wall-scroller polygon[data-type="regular"] {
+    fill: #0d6efd !important;  /* Blue - Regular Hold */
     stroke: #000000;
     fill-opacity: 0.9;
 }
 
 .wall-scroller polygon[data-type="finish"] {
-    fill: #6f42c1 !important; /* purple */
+    fill: #6f42c1 !important;  /* Purple - Finish Hold */
     stroke: #000000;
     fill-opacity: 0.9;
 }
@@ -188,15 +188,14 @@
 {% block extra_js %}
 <script>
 // Initialize constants and variables
-const HOLD_TYPES = ['', 'foot', 'start', 'finish', 'regular'];  // This will give us: empty → blue → yellow → green → purple
-const initialHolds = JSON.parse(document.querySelector('.card').dataset.initialHolds);
+const HOLD_TYPES = ['', 'start', 'foot', 'regular', 'finish'];  // Order: unselected, green, yellow, blue, purple
+const initialHolds = JSON.parse(document.querySelector('.wall-container-wrapper').dataset.initialHolds);
 let selectedHolds = [...initialHolds];
 const WALL_HEIGHT = 100;
-const NUM_SEGMENTS = 10; // Increased to 10 segments to allow for longer routes
+const NUM_SEGMENTS = 10;
 let isPanning = false;
 
 // Create a map to store the route data
-// Key format: `${holdId}_${cycle}`, Value: type
 const routeHolds = new Map();
 
 // Initialize route data from existing route if editing
@@ -206,61 +205,6 @@ if (selectedHolds.length > 0) {
         routeHolds.set(key, hold.type);
     });
 }
-
-// Set up the wall segments
-const wallScroller = document.getElementById('wallScroller');
-const originalSvg = wallScroller.querySelector('svg');
-wallScroller.innerHTML = ''; // Clear the container
-
-// Function to prepare SVG for use
-function prepareSvgForUse(svg, cycleNum) {
-    svg.dataset.cycle = cycleNum.toString();
-    
-    // Ensure all polygons have necessary attributes and are clickable
-    svg.querySelectorAll('polygon').forEach((polygon, index) => {
-        // If polygon doesn't have a grid position, assign one
-        if (!polygon.dataset.gridPosition) {
-            polygon.dataset.gridPosition = `hold_${index}`;
-        }
-        
-        // Ensure x and y coordinates are set
-        if (!polygon.dataset.gridX) {
-            const points = polygon.getAttribute('points').split(' ')[0].split(',');
-            polygon.dataset.gridX = points[0];
-            polygon.dataset.gridY = points[1];
-        }
-        
-        // Add click handler
-        polygon.addEventListener('click', (e) => {
-            if (!e.shiftKey) {
-                e.preventDefault();
-                e.stopPropagation();
-                handleHoldClick(polygon);
-            }
-        });
-        
-        // Make sure the polygon is styled properly
-        polygon.style.cursor = 'pointer';
-    });
-    
-    return svg;
-}
-
-// Create multiple wall segments
-for (let i = NUM_SEGMENTS - 1; i >= 0; i--) {
-    const svg = originalSvg.cloneNode(true);
-    prepareSvgForUse(svg, i);
-    wallScroller.appendChild(svg);
-}
-
-// Set the wall scroller height to accommodate all segments
-wallScroller.style.height = `${NUM_SEGMENTS * 100}%`;
-
-// Scroll to bottom initially
-requestAnimationFrame(() => {
-    const container = wallScroller.parentElement;
-    container.scrollTop = container.scrollHeight;
-});
 
 // Function to handle hold clicks
 function handleHoldClick(hold) {
@@ -272,15 +216,15 @@ function handleHoldClick(hold) {
     const cycle = parseInt(hold.closest('svg').dataset.cycle);
     const key = `${holdId}_${cycle}`;
     
+    // Get current type and find next type
     const currentType = routeHolds.get(key) || '';
     const currentIndex = HOLD_TYPES.indexOf(currentType);
     const nextIndex = (currentIndex + 1) % HOLD_TYPES.length;
     const nextType = HOLD_TYPES[nextIndex];
     
-    console.log('Current type:', currentType);
-    console.log('Next type:', nextType);
-    console.log('HOLD_TYPES:', HOLD_TYPES);
+    console.log('Click:', { currentType, nextType, HOLD_TYPES });  // Debug log
     
+    // Update the hold type
     if (nextType) {
         // Add or update hold in route
         routeHolds.set(key, nextType);
@@ -316,6 +260,65 @@ function handleHoldClick(hold) {
     }
 }
 
+// Set up the wall segments
+const wallScroller = document.getElementById('wallScroller');
+const originalSvg = wallScroller.querySelector('svg');
+wallScroller.innerHTML = ''; // Clear the container
+
+// Function to prepare SVG for use
+function prepareSvgForUse(svg, cycleNum) {
+    svg.dataset.cycle = cycleNum.toString();
+    
+    // Ensure all polygons have necessary attributes and are clickable
+    svg.querySelectorAll('polygon').forEach((polygon, index) => {
+        // If polygon doesn't have a grid position, assign one
+        if (!polygon.dataset.gridPosition) {
+            polygon.dataset.gridPosition = `hold_${index}`;
+        }
+        
+        // Ensure x and y coordinates are set
+        if (!polygon.dataset.gridX) {
+            const points = polygon.getAttribute('points').split(' ')[0].split(',');
+            polygon.dataset.gridX = points[0];
+            polygon.dataset.gridY = points[1];
+        }
+        
+        // Remove any existing click handlers
+        polygon.replaceWith(polygon.cloneNode(true));
+        const newPolygon = svg.querySelector(`polygon[data-grid-position="${polygon.dataset.gridPosition}"]`);
+        
+        // Add click handler
+        newPolygon.addEventListener('click', (e) => {
+            if (!e.shiftKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleHoldClick(newPolygon);
+            }
+        });
+        
+        // Make sure the polygon is styled properly
+        newPolygon.style.cursor = 'pointer';
+    });
+    
+    return svg;
+}
+
+// Create multiple wall segments
+for (let i = NUM_SEGMENTS - 1; i >= 0; i--) {
+    const svg = originalSvg.cloneNode(true);
+    prepareSvgForUse(svg, i);
+    wallScroller.appendChild(svg);
+}
+
+// Set the wall scroller height to accommodate all segments
+wallScroller.style.height = `${NUM_SEGMENTS * 100}%`;
+
+// Scroll to bottom initially
+requestAnimationFrame(() => {
+    const container = wallScroller.parentElement;
+    container.scrollTop = container.scrollHeight;
+});
+
 // Handle panning with shift+click and drag
 let startY = 0;
 let startScroll = 0;
@@ -342,17 +345,6 @@ document.addEventListener('mouseup', () => {
     if (!isPanning) return;
     isPanning = false;
     wallScroller.style.cursor = 'default';
-});
-
-// Add click handlers to all holds
-document.querySelectorAll('.wall-scroller polygon').forEach(hold => {
-    hold.addEventListener('click', (e) => {
-        if (!e.shiftKey) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleHoldClick(hold);
-        }
-    });
 });
 
 // Handle form submission
