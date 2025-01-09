@@ -413,12 +413,26 @@ document.getElementById('routeForm').addEventListener('submit', async (e) => {
         type: hold.type
     }));
     
+    // Calculate climb height based on highest finish hold
+    const finishHolds = validatedHolds.filter(h => h.type === 'finish');
+    const heightInInches = finishHolds.reduce((maxHeight, hold) => {
+        // Each segment is 20 feet (240 inches) tall
+        // y=0 is at the top (20 ft) and y=40 is at the bottom (6 inches)
+        // For segment 0: height ranges from 20ft (y=0) to 6 inches (y=40)
+        // Each higher segment adds 20ft to the base height
+        const segmentBaseHeight = (hold.segment + 1) * 240; // Base height at y=0 for this segment
+        const heightWithinSegment = 240 * (1 - hold.y / 40); // Convert y to height (inverted)
+        const holdHeight = segmentBaseHeight - (240 - heightWithinSegment);
+        return Math.max(maxHeight, holdHeight);
+    }, 0);
+    
     const routeData = {
         id: '{{ route.id }}',
         name: formData.get('name'),
         grade: formData.get('grade'),
         author: formData.get('author'),
         holds: validatedHolds,
+        height_inches: Math.round(heightInInches * 100) / 100,  // Round to 2 decimal places
         created_at: '{{ route.created_at }}'
     };
     

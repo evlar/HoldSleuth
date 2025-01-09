@@ -72,6 +72,9 @@
                                                 {% if route.grade %}
                                                 <span class="badge bg-primary me-2">{{ route.grade }}</span>
                                                 {% endif %}
+                                                {% if route.height_inches %}
+                                                <span class="badge bg-info me-2">{{ (route.height_inches / 12)|round(1) }}ft</span>
+                                                {% endif %}
                                                 <small class="text-muted">
                                                     Created by {{ route.author or 'Anonymous' }} on 
                                                     {{ route.created_at|datetime }}
@@ -193,6 +196,7 @@ async function fetchAndDisplayRoutes(params = new URLSearchParams()) {
                                 <h5 class="card-title">${route.name}</h5>
                                 <p class="card-text">
                                     ${route.grade ? `<span class="badge bg-primary me-2">${route.grade}</span>` : ''}
+                                    ${route.height_inches ? `<span class="badge bg-info me-2">${(route.height_inches / 12).toFixed(1)}ft</span>` : ''}
                                     <small class="text-muted">
                                         Created by ${route.author || 'Anonymous'} on 
                                         ${new Date(route.created_at).toLocaleString()}
