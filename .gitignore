@@ -121,6 +121,9 @@ image_detection/images/
 *.svg
 *.pt
 
+# Route data
+static/routes/*.json
+
 # IDE specific
 .idea/
 .vscode/

@@ -213,8 +213,8 @@ function handleHoldClick(hold) {
     const holdId = hold.dataset.gridPosition;
     if (!holdId) return;
     
-    const cycle = parseInt(hold.closest('svg').dataset.cycle);
-    const key = `${holdId}_${cycle}`;
+    const segment = parseInt(hold.closest('svg').dataset.cycle);
+    const key = `${holdId}_${segment}`;
     
     // Get current type and find next type
     const currentType = routeHolds.get(key) || '';
@@ -230,19 +230,17 @@ function handleHoldClick(hold) {
         
         // Update selectedHolds array for saving
         const x = parseInt(hold.dataset.gridX);
-        const baseY = parseFloat(hold.dataset.gridY);
-        // Calculate y position: base position + (cycle * wall height)
-        // Each wall segment is 40 units high as per documentation
-        const y = baseY + (cycle * 40.0);
+        const y = parseInt(hold.dataset.gridY);
         
         const holdData = {
             x: Math.min(7, Math.max(0, x)), // Ensure x is between 0 and 7
-            y: Math.max(0, y), // Ensure y is positive
+            y: Math.min(39, Math.max(0, y)), // Ensure y is between 0 and 39
+            segment: segment,
             type: nextType
         };
         
         const holdIndex = selectedHolds.findIndex(h => 
-            h.x === holdData.x && Math.abs(h.y - holdData.y) < 0.1); // Use small epsilon for float comparison
+            h.x === holdData.x && h.y === holdData.y && h.segment === holdData.segment);
         
         if (holdIndex === -1) {
             selectedHolds.push(holdData);
@@ -255,11 +253,10 @@ function handleHoldClick(hold) {
         delete hold.dataset.type;
         
         const x = parseInt(hold.dataset.gridX);
-        const baseY = parseFloat(hold.dataset.gridY);
-        const y = baseY + (cycle * 40.0);
+        const y = parseInt(hold.dataset.gridY);
         
         const holdIndex = selectedHolds.findIndex(h => 
-            h.x === x && Math.abs(h.y - y) < 0.1);
+            h.x === x && h.y === y && h.segment === segment);
         if (holdIndex !== -1) {
             selectedHolds.splice(holdIndex, 1);
         }
@@ -286,9 +283,8 @@ function prepareSvgForUse(svg, cycleNum) {
         if (!polygon.dataset.gridX || !polygon.dataset.gridY) {
             const points = polygon.getAttribute('points').split(' ')[0].split(',');
             // Convert SVG coordinates to grid coordinates
-            // SVG points are in pixels, we need to convert to grid coordinates
-            const x = Math.round(parseFloat(points[0]) / 100); // Assuming 100px per grid unit
-            const y = parseFloat(points[1]) / 100; // Convert to grid units
+            const x = Math.round(parseFloat(points[0]) / 100); // Convert to grid x (0-7)
+            const y = Math.round(parseFloat(points[1]) / 100); // Convert to grid y (0-39)
             polygon.dataset.gridX = x.toString();
             polygon.dataset.gridY = y.toString();
         }
@@ -370,16 +366,23 @@ document.getElementById('routeForm').addEventListener('submit', async (e) => {
         return;
     }
     
+    // Prepare hold data with proper types and validation
+    const formattedHolds = selectedHolds.map(hold => ({
+        x: parseInt(hold.x),
+        y: parseInt(hold.y),
+        segment: parseInt(hold.segment),
+        type: hold.type
+    }));
+
+    // Log the formatted holds for debugging
+    console.log('Formatted holds:', formattedHolds);
+    
     const formData = new FormData(e.target);
     const routeData = {
         name: formData.get('name'),
         grade: formData.get('grade'),
         author: formData.get('author'),
-        holds: selectedHolds.map(hold => ({
-            x: parseInt(hold.x),  // Ensure x is an integer
-            y: parseFloat(hold.y),  // Ensure y is a float
-            type: hold.type
-        })),
+        holds: formattedHolds,
         created_at: new Date().toISOString()
     };
     

@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}HoldSleuth - View Route{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2>{{ route.name }}</h2>
+        <p class="lead">
+            {% if route.grade %}
+            <span class="badge bg-primary me-2">{{ route.grade }}</span>
+            {% endif %}
+            <small class="text-muted">
+                Created by {{ route.author or 'Anonymous' }} on 
+                {{ route.created_at|datetime }}
+            </small>
+        </p>
+    </div>
+    <div class="col-md-4 text-end">
+        <a href="{{ url_for('routes_page') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Routes
+        </a>
+        <a href="{{ url_for('route_edit', route_id=route.id) }}" class="btn btn-primary">
+            <i class="bi bi-pencil"></i> Edit Route
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Route Visualization -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="wall-container">
+                    <div class="wall-scroller">
+                        <!-- SVG wall with holds -->
+                        {{ wall_svg|safe }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Hold Types Legend -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Hold Types</h5>
+                <div class="d-flex flex-column gap-2">
+                    <div class="hold-type">
+                        <span class="hold-color" style="background-color: #28a745"></span>
+                        Start Hold ({{ route.holds|selectattr('type', 'equalto', 'start')|list|length }})
+                    </div>
+                    <div class="hold-type">
+                        <span class="hold-color" style="background-color: #ffc107"></span>
+                        Foot Hold ({{ route.holds|selectattr('type', 'equalto', 'foot')|list|length }})
+                    </div>
+                    <div class="hold-type">
+                        <span class="hold-color" style="background-color: #0d6efd"></span>
+                        Regular Hold ({{ route.holds|selectattr('type', 'equalto', 'regular')|list|length }})
+                    </div>
+                    <div class="hold-type">
+                        <span class="hold-color" style="background-color: #6f42c1"></span>
+                        Finish Hold ({{ route.holds|selectattr('type', 'equalto', 'finish')|list|length }})
+                    </div>
+                </div>
+                <hr>
+                <p class="text-muted mb-0">
+                    Total Holds: {{ route.holds|length }}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+<style>
+.wall-container {
+    position: relative;
+    width: 100%;
+    height: 60vh;
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.wall-scroller {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.wall-scroller svg {
+    width: 100%;
+    height: 100%;
+    background-color: #ffffff;
+}
+
+.wall-scroller polygon {
+    fill: #808080;
+    fill-opacity: 0.7;
+    stroke: #000000;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.wall-scroller polygon[data-type="start"] {
+    fill: #28a745 !important;  /* Green - Start Hold */
+    stroke: #000000;
+    fill-opacity: 0.9;
+}
+
+.wall-scroller polygon[data-type="foot"] {
+    fill: #ffc107 !important;  /* Yellow - Foot Hold */
+    stroke: #000000;
+    fill-opacity: 0.9;
+}
+
+.wall-scroller polygon[data-type="regular"] {
+    fill: #0d6efd !important;  /* Blue - Regular Hold */
+    stroke: #000000;
+    fill-opacity: 0.9;
+}
+
+.wall-scroller polygon[data-type="finish"] {
+    fill: #6f42c1 !important;  /* Purple - Finish Hold */
+    stroke: #000000;
+    fill-opacity: 0.9;
+}
+
+.hold-type {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.hold-color {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 0.25rem;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Initialize the route visualization
+document.addEventListener('DOMContentLoaded', function() {
+    var routeHolds = JSON.parse('{{ route.holds|tojson|safe }}');
+    var wallScroller = document.querySelector('.wall-scroller');
+    var originalSvg = wallScroller.querySelector('svg');
+    wallScroller.innerHTML = ''; // Clear the container
+
+    // Create multiple wall segments
+    for (var i = 10; i >= 0; i--) {
+        var svg = originalSvg.cloneNode(true);
+        svg.dataset.cycle = i.toString();
+        wallScroller.appendChild(svg);
+    }
+
+    // Mark holds on the SVG
+    routeHolds.forEach(function(hold) {
+        // Find the corresponding SVG segment
+        var svg = wallScroller.querySelector('svg[data-cycle="' + hold.segment + '"]');
+        if (!svg) return;
+
+        // Find all polygons in this segment
+        var polygons = Array.from(svg.querySelectorAll('polygon'));
+        
+        // Find the matching polygon based on x and y coordinates
+        var polygon = polygons.find(function(p) {
+            var points = p.getAttribute('points').split(' ')[0].split(',');
+            var x = Math.round(parseFloat(points[0]) / 100); // Convert SVG x to grid x
+            var y = Math.round(parseFloat(points[1]) / 100); // Convert SVG y to grid y
+            return x === hold.x && y === hold.y;
+        });
+
+        if (polygon) {
+            polygon.dataset.type = hold.type;
+        }
+    });
+});
+</script>
+{% endblock %} 

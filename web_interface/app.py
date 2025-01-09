@@ -243,7 +243,21 @@ def routes_page():
 def route_view(route_id):
     try:
         route_data = load_route(os.path.join(app.config['ROUTES_FOLDER'], f"{route_id}.json"))
-        return render_template('route_view.html', route=route_data)
+        # Get the grid SVG file for visualization
+        grid_svg_path = os.path.join(project_root, 'output', 'svg', 'grid', 'treadwall_grid.svg')
+        if not os.path.exists(grid_svg_path):
+            return "No wall scan found. Please scan your wall first.", 400
+        
+        with open(grid_svg_path, 'r') as f:
+            wall_svg = f.read()
+            # Clean up SVG content
+            wall_svg = (wall_svg
+                .replace('ns0:', '')  # Remove namespace prefix
+                .replace('xmlns:ns0', 'xmlns')  # Fix namespace declaration
+                .replace('<?xml version=\'1.0\' encoding=\'utf-8\'?>\n', '')  # Remove XML declaration
+            )
+        
+        return render_template('route_view.html', route=route_data, wall_svg=wall_svg)
     except FileNotFoundError:
         return "Route not found", 404
 
