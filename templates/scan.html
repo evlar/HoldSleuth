@@ -43,7 +43,7 @@
                     <p class="text-muted mb-3">
                         Review and edit the detected holds before final processing:<br>
                         • Left click: place t-nut<br>
-                        • Left click+drag: draw box<br>
+                        • Ctrl + Left click and drag: draw hold box<br>
                         • Right-click: remove detection<br>
                         • Z: undo<br>
                         • Enter: proceed with final processing<br>
@@ -88,6 +88,7 @@ let translateX = 0;
 let translateY = 0;
 let isPanning = false;
 let lastPanPoint = null;
+let currentTnut = null;
 
 document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -145,23 +146,27 @@ function updateHoldOverlay() {
     holdOverlay.appendChild(selectionBox);
     
     currentHolds.forEach((hold, index) => {
-        // Create center point
-        const holdElement = document.createElement('div');
-        holdElement.className = 'hold hold-regular';
-        holdElement.style.left = `${hold.center[0]}px`;
-        holdElement.style.top = `${hold.center[1]}px`;
-        holdElement.dataset.index = index;
+        if (hold.center) {
+            // Create center point for t-nuts
+            const holdElement = document.createElement('div');
+            holdElement.className = 'hold hold-regular';
+            holdElement.style.left = `${hold.center[0]}px`;
+            holdElement.style.top = `${hold.center[1]}px`;
+            holdElement.dataset.index = index;
+            holdOverlay.appendChild(holdElement);
+        }
         
-        // Create bounding box
-        const boxElement = document.createElement('div');
-        boxElement.className = 'hold-box';
-        boxElement.style.left = `${hold.bbox[0]}px`;
-        boxElement.style.top = `${hold.bbox[1]}px`;
-        boxElement.style.width = `${hold.bbox[2] - hold.bbox[0]}px`;
-        boxElement.style.height = `${hold.bbox[3] - hold.bbox[1]}px`;
-        
-        holdOverlay.appendChild(holdElement);
-        holdOverlay.appendChild(boxElement);
+        // Create bounding box if it exists and has size
+        if (hold.bbox && 
+            (hold.bbox[2] - hold.bbox[0] > 0 || hold.bbox[3] - hold.bbox[1] > 0)) {
+            const boxElement = document.createElement('div');
+            boxElement.className = 'hold-box';
+            boxElement.style.left = `${hold.bbox[0]}px`;
+            boxElement.style.top = `${hold.bbox[1]}px`;
+            boxElement.style.width = `${hold.bbox[2] - hold.bbox[0]}px`;
+            boxElement.style.height = `${hold.bbox[3] - hold.bbox[1]}px`;
+            holdOverlay.appendChild(boxElement);
+        }
     });
 }
 
@@ -179,18 +184,30 @@ holdOverlay.addEventListener('mousedown', (e) => {
     }
 
     if (e.button === 0) { // Left click
-        isDragging = true;
-        dragStart = {
-            x: e.offsetX,
-            y: e.offsetY
-        };
+        const clickX = e.offsetX;
+        const clickY = e.offsetY;
         
-        // Show selection box at start point
-        selectionBox.style.left = `${dragStart.x}px`;
-        selectionBox.style.top = `${dragStart.y}px`;
-        selectionBox.style.width = '0';
-        selectionBox.style.height = '0';
-        selectionBox.style.display = 'block';
+        if (!e.ctrlKey) {
+            // Simple click - add t-nut point
+            currentTnut = {
+                center: [clickX, clickY],
+                bbox: [clickX, clickY, clickX, clickY],  // Will be updated when box is drawn
+                confidence: 1.0,
+                color: 'gray'
+            };
+            undoStack.push([...currentHolds]);
+            currentHolds.push(currentTnut);
+            updateHoldOverlay();
+        } else if (currentTnut) {
+            // Start drawing box around the current t-nut
+            isDragging = true;
+            dragStart = { x: clickX, y: clickY };
+            selectionBox.style.left = `${clickX}px`;
+            selectionBox.style.top = `${clickY}px`;
+            selectionBox.style.width = '0';
+            selectionBox.style.height = '0';
+            selectionBox.style.display = 'block';
+        }
     } else if (e.button === 2) { // Right click
         const clickX = e.offsetX;
         const clickY = e.offsetY;
@@ -202,6 +219,9 @@ holdOverlay.addEventListener('mousedown', (e) => {
             if (clickX >= x1 && clickX <= x2 && clickY >= y1 && clickY <= y2) {
                 undoStack.push([...currentHolds]);
                 currentHolds.splice(i, 1);
+                if (hold === currentTnut) {
+                    currentTnut = null;
+                }
                 updateHoldOverlay();
                 break;
             }
@@ -220,7 +240,7 @@ holdOverlay.addEventListener('mousemove', (e) => {
         return;
     }
 
-    if (isDragging) {
+    if (isDragging && currentTnut) {
         const currentX = e.offsetX;
         const currentY = e.offsetY;
         
@@ -231,6 +251,7 @@ holdOverlay.addEventListener('mousemove', (e) => {
         selectionBox.style.height = `${Math.abs(height)}px`;
         selectionBox.style.left = `${width < 0 ? currentX : dragStart.x}px`;
         selectionBox.style.top = `${height < 0 ? currentY : dragStart.y}px`;
+        selectionBox.style.display = 'block';
     }
 });
 
@@ -241,36 +262,23 @@ holdOverlay.addEventListener('mouseup', (e) => {
         return;
     }
 
-    if (isDragging) {
+    if (isDragging && currentTnut) {
         const endX = e.offsetX;
         const endY = e.offsetY;
         
-        if (Math.abs(endX - dragStart.x) < 5 && Math.abs(endY - dragStart.y) < 5) {
-            // Treat as a click - add a hold at the click point
-            undoStack.push([...currentHolds]);
-            currentHolds.push({
-                center: [endX, endY],
-                bbox: [endX - 10, endY - 10, endX + 10, endY + 10],
-                confidence: 1.0,
-                color: 'gray'
-            });
-        } else {
-            // Add hold with the drawn box
-            const x1 = Math.min(dragStart.x, endX);
-            const y1 = Math.min(dragStart.y, endY);
-            const x2 = Math.max(dragStart.x, endX);
-            const y2 = Math.max(dragStart.y, endY);
-            
-            undoStack.push([...currentHolds]);
-            currentHolds.push({
-                center: [(x1 + x2) / 2, (y1 + y2) / 2],
-                bbox: [x1, y1, x2, y2],
-                confidence: 1.0,
-                color: 'gray'
-            });
+        // Update the current t-nut's bbox
+        const x1 = Math.min(dragStart.x, endX);
+        const y1 = Math.min(dragStart.y, endY);
+        const x2 = Math.max(dragStart.x, endX);
+        const y2 = Math.max(dragStart.y, endY);
+        
+        // Only update box if it has some size
+        if (x2 - x1 > 5 && y2 - y1 > 5) {
+            currentTnut.bbox = [x1, y1, x2, y2];
+            updateHoldOverlay();
+            currentTnut = null;  // Hold is complete
         }
         
-        updateHoldOverlay();
         isDragging = false;
         selectionBox.style.display = 'none';
     }

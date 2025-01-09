@@ -83,12 +83,25 @@ def process_final_holds(image_path, approved_holds):
         # Convert approved holds back to Hold objects
         holds = []
         for hold_data in approved_holds:
-            holds.append(Hold(
-                center=tuple(hold_data['center']),
-                bbox=tuple(hold_data['bbox']),
-                confidence=float(hold_data['confidence']),
-                color=hold_data['color']
-            ))
+            # Handle both t-nuts (with center) and boxes (with just bbox)
+            if 'center' in hold_data:
+                # T-nut point
+                holds.append(Hold(
+                    center=tuple(hold_data['center']),
+                    bbox=tuple(hold_data['bbox']),
+                    confidence=float(hold_data['confidence']),
+                    color=hold_data['color']
+                ))
+            else:
+                # Box only
+                x1, y1, x2, y2 = hold_data['bbox']
+                center = ((x1 + x2) / 2, (y1 + y2) / 2)
+                holds.append(Hold(
+                    center=center,
+                    bbox=tuple(hold_data['bbox']),
+                    confidence=float(hold_data['confidence']),
+                    color=hold_data['color']
+                ))
         
         # Initialize SAM blob extractor
         blob_extractor = SAMBlobExtractor()
