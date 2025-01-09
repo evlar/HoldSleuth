@@ -209,9 +209,11 @@ def transform_svg_to_grid(svg_root, grid_params, tnuts):
         
         # Calculate grid position
         grid_x = int((nearest_tnut[0] - grid_params['origin_x']) / grid_params['spacing_x'])
-        grid_y = int((nearest_tnut[1] - grid_params['origin_y']) / grid_params['spacing_y'])
+        grid_y = (nearest_tnut[1] - grid_params['origin_y']) / grid_params['spacing_y']
+        
+        # Ensure x is between 0 and 7
         grid_x = max(0, min(7, grid_x))
-        grid_y = max(0, min(39, grid_y))
+        grid_y = max(0, grid_y)
         
         holds.append({
             'polygon': polygon,
@@ -257,13 +259,15 @@ def transform_svg_to_grid(svg_root, grid_params, tnuts):
         hold['polygon'].set('points', ' '.join(transformed_points))
         
         # Add grid position metadata
-        hold['polygon'].set('data-grid-x', str(hold['grid_x']))
-        hold['polygon'].set('data-grid-y', str(hold['grid_y']))
-        hold['polygon'].set('data-grid-position', f"{hold['grid_x']},{hold['grid_y']}")
-        hold['polygon'].set('data-tnut-x', str(hold['nearest_tnut'][0]))
-        hold['polygon'].set('data-tnut-y', str(hold['nearest_tnut'][1]))
-        hold['polygon'].set('data-original-tnut-x', str(hold['tnut_x']))
-        hold['polygon'].set('data-original-tnut-y', str(hold['tnut_y']))
+        hold['polygon'].set('data-grid-x', str(int(hold['grid_x'])))
+        hold['polygon'].set('data-grid-y', str(int(hold['grid_y'])))  # Store y as integer for consistency
+        hold['polygon'].set('data-grid-position', f"{int(hold['grid_x'])},{int(hold['grid_y'])}")
+        
+        # Store raw coordinates as separate attributes if needed
+        hold['polygon'].set('data-raw-x', f"{hold['nearest_tnut'][0]:.2f}")
+        hold['polygon'].set('data-raw-y', f"{hold['nearest_tnut'][1]:.2f}")
+        hold['polygon'].set('data-original-x', f"{hold['tnut_x']:.2f}")
+        hold['polygon'].set('data-original-y', f"{hold['tnut_y']:.2f}")
         
         # Add color as metadata if it exists
         if 'fill' in hold['polygon'].attrib:

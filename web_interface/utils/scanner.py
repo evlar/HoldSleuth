@@ -142,6 +142,10 @@ def save_as_svg(blobs, output_path):
             '<g>'  # Root group
         ]
         
+        # Calculate grid parameters
+        grid_width = width / 8  # 8 columns
+        grid_height = height / 40  # 40 rows
+        
         # Add holds to the SVG
         for blob in blobs:
             try:
@@ -157,7 +161,11 @@ def save_as_svg(blobs, output_path):
                     points.append(f"{float(x)},{float(y)}")
                 points_str = " ".join(points)
                 
-                # Create polygon with hold color and t-nut location metadata
+                # Calculate grid position
+                grid_x = int(min(7, max(0, blob.center[0] / grid_width)))
+                grid_y = int(max(0, blob.center[1] / grid_height))
+                
+                # Create polygon with hold color and metadata
                 color = blob.color if blob.color != "unknown" else "#808080"
                 tnut_x = float(blob.center[0])
                 tnut_y = float(blob.center[1])
@@ -168,6 +176,9 @@ def save_as_svg(blobs, output_path):
                     f'stroke="#000000" '
                     f'stroke-width="1" '
                     f'opacity="0.5" '
+                    f'data-grid-x="{grid_x}" '
+                    f'data-grid-y="{grid_y}" '
+                    f'data-grid-position="{grid_x},{grid_y}" '
                     f'data-tnut-x="{tnut_x}" '
                     f'data-tnut-y="{tnut_y}"/>'
                 )

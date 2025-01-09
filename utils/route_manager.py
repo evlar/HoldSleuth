@@ -39,8 +39,8 @@ def validate_route(route_data):
         if not isinstance(hold['x'], int) or not (0 <= hold['x'] <= 7):
             raise ValueError("Hold x position must be an integer between 0 and 7")
             
-        if not isinstance(hold['y'], int) or not (0 <= hold['y'] <= 39):
-            raise ValueError("Hold y position must be an integer between 0 and 39")
+        if not isinstance(hold['y'], (int, float)) or hold['y'] < 0:
+            raise ValueError("Hold y position must be a positive number")
             
         if not isinstance(hold['segment'], int) or hold['segment'] < 0:
             raise ValueError("Hold segment must be a non-negative integer")
@@ -48,13 +48,14 @@ def validate_route(route_data):
         if hold['type'] not in valid_types:
             raise ValueError(f"Invalid hold type. Must be one of: {', '.join(valid_types)}")
 
-def save_route(route_data, routes_folder):
+def save_route(route_data, routes_folder, filename=None):
     """
     Save a route to a JSON file.
     
     Args:
         route_data (dict): Route data to save
         routes_folder (str): Path to the routes folder
+        filename (str, optional): Filename to use for saving. If not provided, a new one will be generated.
         
     Returns:
         str: Filename of the saved route
@@ -66,12 +67,13 @@ def save_route(route_data, routes_folder):
     if 'created_at' not in route_data:
         route_data['created_at'] = datetime.utcnow().isoformat() + 'Z'
     
-    # Generate unique ID if not present
-    route_id = str(uuid.uuid4())
-    route_data['id'] = route_id
+    # Generate unique ID if not present and no filename provided
+    if not filename:
+        route_id = str(uuid.uuid4())
+        route_data['id'] = route_id
+        filename = f"{route_id}.json"
     
     # Save route to file
-    filename = f"{route_id}.json"
     filepath = os.path.join(routes_folder, filename)
     
     with open(filepath, 'w') as f:

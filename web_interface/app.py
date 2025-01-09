@@ -274,12 +274,18 @@ def route_edit(route_id):
         
         with open(grid_svg_path, 'r') as f:
             wall_svg = f.read()
+            # Clean up SVG content
+            wall_svg = (wall_svg
+                .replace('ns0:', '')  # Remove namespace prefix
+                .replace('xmlns:ns0', 'xmlns')  # Fix namespace declaration
+                .replace('<?xml version=\'1.0\' encoding=\'utf-8\'?>\n', '')  # Remove XML declaration
+            )
         
         # Get available grades
         grades = ['5.6', '5.7', '5.8', '5.9', '5.10a', '5.10b', '5.10c', '5.10d', 
                  '5.11a', '5.11b', '5.11c', '5.11d', '5.12a', '5.12b', '5.12c', '5.12d']
         
-        return render_template('route_create.html', 
+        return render_template('route_edit.html', 
                              route=route_data,
                              wall_svg=wall_svg,
                              grades=grades)
@@ -314,6 +320,8 @@ def api_route(route_id):
     elif request.method == 'PUT':
         try:
             route_data = request.json
+            # Ensure the route ID matches the URL
+            route_data['id'] = route_id
             save_route(route_data, app.config['ROUTES_FOLDER'], filename=f"{route_id}.json")
             return jsonify({'message': 'Route updated successfully'})
         except Exception as e:

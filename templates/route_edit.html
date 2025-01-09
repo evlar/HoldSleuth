@@ -1,23 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}HoldSleuth - {{ 'Edit' if route else 'Create' }} Route{% endblock %}
+{% block title %}HoldSleuth - Edit Route{% endblock %}
 
 {% block content %}
 <div class="row mb-4">
     <div class="col-md-8">
-        <h2>{{ 'Edit' if route else 'Create' }} Route</h2>
+        <h2>Edit Route</h2>
         <p class="lead">
-            {% if route %}
-                {% if route.grade %}
-                <span class="badge bg-primary me-2">{{ route.grade }}</span>
-                {% endif %}
-                <small class="text-muted">
-                    Created by {{ route.author or 'Anonymous' }} on 
-                    {{ route.created_at|datetime }}
-                </small>
-            {% else %}
-                Create a new climbing route
+            {% if route.grade %}
+            <span class="badge bg-primary me-2">{{ route.grade }}</span>
             {% endif %}
+            <small class="text-muted">
+                Created by {{ route.author or 'Anonymous' }} on 
+                {{ route.created_at|datetime }}
+            </small>
         </p>
     </div>
     <div class="col-md-4 text-end">
@@ -49,21 +45,25 @@
                 <div class="d-flex gap-3 align-items-center">
                     <div class="hold-type">
                         <span class="hold-color" style="background-color: #28a745"></span>
-                        Start Hold
+                        Start Hold ({{ route.holds|selectattr('type', 'equalto', 'start')|list|length }})
                     </div>
                     <div class="hold-type">
                         <span class="hold-color" style="background-color: #ffc107"></span>
-                        Foot Hold
+                        Foot Hold ({{ route.holds|selectattr('type', 'equalto', 'foot')|list|length }})
                     </div>
                     <div class="hold-type">
                         <span class="hold-color" style="background-color: #0d6efd"></span>
-                        Regular Hold
+                        Regular Hold ({{ route.holds|selectattr('type', 'equalto', 'regular')|list|length }})
                     </div>
                     <div class="hold-type">
                         <span class="hold-color" style="background-color: #6f42c1"></span>
-                        Finish Hold
+                        Finish Hold ({{ route.holds|selectattr('type', 'equalto', 'finish')|list|length }})
                     </div>
                 </div>
+                <hr>
+                <p class="text-muted mb-0">
+                    Total Holds: {{ route.holds|length }}
+                </p>
             </div>
         </div>
     </div>
@@ -77,7 +77,7 @@
                     <div class="mb-3">
                         <label for="routeName" class="form-label">Route Name</label>
                         <input type="text" class="form-control" id="routeName" name="name" 
-                               value="{{ route.name if route else '' }}" required>
+                               value="{{ route.name }}" required>
                     </div>
                     <div class="mb-3">
                         <label for="routeGrade" class="form-label">Grade</label>
@@ -85,7 +85,7 @@
                             <option value="">Select Grade</option>
                             {% for grade in grades %}
                             <option value="{{ grade }}" 
-                                    {{ 'selected' if route and route.grade == grade else '' }}>
+                                    {{ 'selected' if route.grade == grade else '' }}>
                                 {{ grade }}
                             </option>
                             {% endfor %}
@@ -94,12 +94,10 @@
                     <div class="mb-3">
                         <label for="routeAuthor" class="form-label">Author</label>
                         <input type="text" class="form-control" id="routeAuthor" name="author"
-                               value="{{ route.author if route else '' }}">
+                               value="{{ route.author }}">
                     </div>
                     <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">
-                            {{ 'Save Changes' if route else 'Create Route' }}
-                        </button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
                         <a href="{{ url_for('routes_page') }}" class="btn btn-outline-secondary">Cancel</a>
                     </div>
                 </form>
@@ -209,40 +207,31 @@ let isPanning = false;
 let startY = 0;
 let startScroll = 0;
 
-// Initialize selected holds from existing route or empty array
-let selectedHolds = {{ route.holds|tojson|safe if route else '[]' }};
+// Initialize selected holds from route data
+let selectedHolds = {{ route.holds|tojson|safe }};
 const routeHolds = new Map();
 
-// Initialize route data from existing route if editing
-if (selectedHolds.length > 0) {
-    // Ensure all hold coordinates are properly formatted
-    selectedHolds = selectedHolds.map(hold => ({
-        ...hold,
-        x: Math.min(7, Math.max(0, Math.floor(Number(hold.x)))),  // Ensure x is integer 0-7
-        y: Math.max(0, parseFloat(hold.y)),  // Ensure y is positive float
-        segment: parseInt(hold.segment)
-    }));
-    
-    selectedHolds.forEach(hold => {
-        const key = `${hold.x},${hold.y}_${hold.segment}`;
-        routeHolds.set(key, hold.type);
-    });
-}
+// Initialize route data
+selectedHolds = selectedHolds.map(hold => ({
+    ...hold,
+    x: Math.min(7, Math.max(0, Math.floor(Number(hold.x)))),  // Ensure x is integer 0-7
+    y: Math.max(0, parseFloat(hold.y)),  // Ensure y is positive float
+    segment: parseInt(hold.segment)
+}));
+
+// Initialize route data
+selectedHolds.forEach(hold => {
+    const key = `${hold.x},${hold.y}_${hold.segment}`;
+    routeHolds.set(key, hold.type);
+});
 
 // Function to handle hold clicks
 function handleHoldClick(hold) {
     if (isPanning) return;
     
     // Parse and validate coordinates
-    const x = parseInt(hold.dataset.gridX);
-    const y = parseInt(hold.dataset.gridY);
-    
-    // Check for invalid values
-    if (isNaN(x) || isNaN(y) || x < 0 || x > 7 || y < 0) {
-        console.error('Invalid coordinates:', hold.dataset);
-        return;
-    }
-    
+    const x = Math.min(7, Math.max(0, Math.floor(parseFloat(hold.dataset.gridX))));  // Ensure integer 0-7
+    const y = Math.max(0, parseFloat(hold.dataset.gridY));  // Ensure positive float
     const segment = parseInt(hold.closest('svg').dataset.cycle);
     const key = `${x},${y}_${segment}`;
     
@@ -261,7 +250,7 @@ function handleHoldClick(hold) {
         // Update selectedHolds array for saving
         const holdData = {
             x: x,  // Already validated as integer 0-7
-            y: y,  // Already validated as integer
+            y: y,  // Already validated as positive float
             segment: segment,
             type: nextType
         };
@@ -285,6 +274,25 @@ function handleHoldClick(hold) {
             selectedHolds.splice(holdIndex, 1);
         }
     }
+    
+    // Update hold counts in legend
+    updateHoldCounts();
+}
+
+// Function to update hold counts in legend
+function updateHoldCounts() {
+    const counts = {
+        start: selectedHolds.filter(h => h.type === 'start').length,
+        foot: selectedHolds.filter(h => h.type === 'foot').length,
+        regular: selectedHolds.filter(h => h.type === 'regular').length,
+        finish: selectedHolds.filter(h => h.type === 'finish').length
+    };
+    
+    document.querySelector('.hold-type:nth-child(1)').textContent = `Start Hold (${counts.start})`;
+    document.querySelector('.hold-type:nth-child(2)').textContent = `Foot Hold (${counts.foot})`;
+    document.querySelector('.hold-type:nth-child(3)').textContent = `Regular Hold (${counts.regular})`;
+    document.querySelector('.hold-type:nth-child(4)').textContent = `Finish Hold (${counts.finish})`;
+    document.querySelector('.text-muted.mb-0').textContent = `Total Holds: ${selectedHolds.length}`;
 }
 
 // Initialize the wall visualization
@@ -333,7 +341,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
             
-            // If editing, set initial hold types
+            // Set initial hold types
             const x = Math.min(7, Math.max(0, Math.floor(parseFloat(polygon.dataset.gridX))));  // Ensure integer 0-7
             const y = Math.max(0, parseFloat(polygon.dataset.gridY));  // Ensure positive float
             const key = `${x},${y}_${i}`;
@@ -397,38 +405,26 @@ document.getElementById('routeForm').addEventListener('submit', async (e) => {
     const formData = new FormData(e.target);
     
     // Ensure all hold coordinates are properly formatted
-    const validatedHolds = selectedHolds.map(hold => {
-        const validatedHold = {
-            ...hold,
-            x: Math.min(7, Math.max(0, Math.floor(Number(hold.x)))),  // Ensure x is integer 0-7
-            y: Math.max(0, parseFloat(hold.y)),  // Ensure y is positive float
-            segment: parseInt(hold.segment),
-            type: hold.type
-        };
-        console.log('Validating hold:', hold, '→', validatedHold);
-        return validatedHold;
-    });
-    
-    console.log('Final validated holds:', validatedHolds);
+    const validatedHolds = selectedHolds.map(hold => ({
+        ...hold,
+        x: Math.min(7, Math.max(0, Math.floor(Number(hold.x)))),  // Ensure x is integer 0-7
+        y: Math.max(0, parseFloat(hold.y)),  // Ensure y is positive float
+        segment: parseInt(hold.segment),
+        type: hold.type
+    }));
     
     const routeData = {
+        id: '{{ route.id }}',
         name: formData.get('name'),
         grade: formData.get('grade'),
         author: formData.get('author'),
         holds: validatedHolds,
-        {% if route %}
-        id: '{{ route.id }}',
         created_at: '{{ route.created_at }}'
-        {% else %}
-        created_at: new Date().toISOString()
-        {% endif %}
     };
     
-    console.log('Sending route data:', routeData);
-    
     try {
-        const response = await fetch('{{ url_for("api_routes") }}{% if route %}/{{ route.id }}{% endif %}', {
-            method: '{{ "PUT" if route else "POST" }}',
+        const response = await fetch('{{ url_for("api_routes") }}/{{ route.id }}', {
+            method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
             },
