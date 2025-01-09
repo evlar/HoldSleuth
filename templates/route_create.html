@@ -30,23 +30,23 @@
                 <h5 class="card-title">Hold Types</h5>
                 <div class="d-flex gap-3 align-items-center">
                     <div class="hold-type">
+                        <span class="hold-color" style="background-color: #28a745"></span>
+                        <span style="color: #28a745; font-weight: 500">Start Hold</span>
+                    </div>
+                    <div class="hold-type">
                         <span class="hold-color" style="background-color: #0d6efd"></span>
-                        Regular Hold
+                        <span style="color: #0d6efd; font-weight: 500">Regular Hold</span>
                     </div>
                     <div class="hold-type">
                         <span class="hold-color" style="background-color: #ffc107"></span>
-                        Foot Hold
-                    </div>
-                    <div class="hold-type">
-                        <span class="hold-color" style="background-color: #28a745"></span>
-                        Start Hold
+                        <span style="color: #946800; font-weight: 500">Foot Hold</span>
                     </div>
                     <div class="hold-type">
                         <span class="hold-color" style="background-color: #6f42c1"></span>
-                        Finish Hold
+                        <span style="color: #6f42c1; font-weight: 500">Finish Hold</span>
                     </div>
                 </div>
-                <p class="text-muted mt-2">Hold SHIFT and drag to scroll. Click holds to cycle through types.</p>
+                <p class="text-muted mt-2">Click holds to cycle through types.</p>
             </div>
         </div>
     </div>
@@ -139,26 +139,26 @@
     transform: scale(1.02);
 }
 
-.wall-scroller polygon[data-type="start"] {
-    fill: #28a745 !important;
+.wall-scroller polygon[data-type="regular"] {
+    fill: #0d6efd !important; /* blue */
     stroke: #000000;
     fill-opacity: 0.9;
 }
 
 .wall-scroller polygon[data-type="foot"] {
-    fill: #ffc107 !important;
+    fill: #ffc107 !important; /* yellow */
     stroke: #000000;
     fill-opacity: 0.9;
 }
 
-.wall-scroller polygon[data-type="regular"] {
-    fill: #0d6efd !important;
+.wall-scroller polygon[data-type="start"] {
+    fill: #28a745 !important; /* green */
     stroke: #000000;
     fill-opacity: 0.9;
 }
 
 .wall-scroller polygon[data-type="finish"] {
-    fill: #6f42c1 !important;
+    fill: #6f42c1 !important; /* purple */
     stroke: #000000;
     fill-opacity: 0.9;
 }
@@ -188,7 +188,7 @@
 {% block extra_js %}
 <script>
 // Initialize constants and variables
-const HOLD_TYPES = ['', 'regular', 'foot', 'start', 'finish'];
+const HOLD_TYPES = ['', 'foot', 'start', 'finish', 'regular'];  // This will give us: empty → blue → yellow → green → purple
 const initialHolds = JSON.parse(document.querySelector('.card').dataset.initialHolds);
 let selectedHolds = [...initialHolds];
 const WALL_HEIGHT = 100;
@@ -276,6 +276,10 @@ function handleHoldClick(hold) {
     const currentIndex = HOLD_TYPES.indexOf(currentType);
     const nextIndex = (currentIndex + 1) % HOLD_TYPES.length;
     const nextType = HOLD_TYPES[nextIndex];
+    
+    console.log('Current type:', currentType);
+    console.log('Next type:', nextType);
+    console.log('HOLD_TYPES:', HOLD_TYPES);
     
     if (nextType) {
         // Add or update hold in route
