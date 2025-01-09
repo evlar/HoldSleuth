@@ -5,6 +5,7 @@ from utils.scanner import get_initial_detections, process_final_holds
 from utils.route_manager import save_route, load_route, list_routes
 import cv2
 from image_detection.yolo_hold_detector import YOLOHoldDetector
+from datetime import datetime
 
 # Create Flask app with explicit template folder
 app = Flask(__name__, 
@@ -15,6 +16,14 @@ app = Flask(__name__,
 app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
 app.config['ROUTES_FOLDER'] = os.path.join('static', 'routes')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['GRID_JPG_PATH'] = None  # Store the latest grid image path
+
+# Register template filters
+@app.template_filter('datetime')
+def format_datetime(value, format='%B %d, %Y at %I:%M %p'):
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    return value.strftime(format)
 
 # Ensure required directories exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -133,6 +142,9 @@ def finalize_scan():
         image_path = app.pending_scans[scan_id]['image_path']
         svg_path, grid_jpg_path = process_final_holds(image_path, approved_holds)
         
+        # Store the grid image path in app config
+        app.config['GRID_JPG_PATH'] = grid_jpg_path
+        
         # Clean up
         del app.pending_scans[scan_id]
         
@@ -145,18 +157,123 @@ def finalize_scan():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/routes/create')
-def create_route():
+def route_create():
+    print("\n=== Route Create Debug Info ===")
+    print(f"Project root: {project_root}")
+    
+    # Check if grid_jpg_path was provided in query parameters
     grid_jpg_path = request.args.get('grid_jpg_path')
-    if not grid_jpg_path:
-        return "No wall image specified", 400
-    return render_template('route_create.html', grid_jpg_path=grid_jpg_path)
+    if grid_jpg_path:
+        # Convert relative path to absolute if needed
+        if grid_jpg_path.startswith('..'):
+            grid_jpg_path = os.path.abspath(os.path.join(project_root, grid_jpg_path))
+        print(f"Grid JPG path from query param: {grid_jpg_path}")
+    else:
+        # Get the grid image path from config
+        grid_jpg_path = app.config['GRID_JPG_PATH']
+        print(f"Grid JPG path from config: {grid_jpg_path}")
+    
+    print(f"Grid JPG exists: {grid_jpg_path and os.path.exists(grid_jpg_path)}")
+    
+    if not grid_jpg_path or not os.path.exists(grid_jpg_path):
+        # Try to find any grid JPG in the grid directory
+        grid_dir = os.path.join(project_root, 'output', 'grid')
+        if os.path.exists(grid_dir):
+            jpg_files = [f for f in os.listdir(grid_dir) if f.startswith('converted_grid_') and f.endswith('.jpg')]
+            if jpg_files:
+                grid_jpg_path = os.path.join(grid_dir, jpg_files[0])
+                print(f"Found grid JPG: {grid_jpg_path}")
+                app.config['GRID_JPG_PATH'] = grid_jpg_path
+    
+    if not grid_jpg_path or not os.path.exists(grid_jpg_path):
+        print(f"No grid JPG found")
+        return "No wall scan found. Please scan your wall first.", 400
+    
+    # Get the corresponding SVG file
+    base_name = os.path.splitext(os.path.basename(grid_jpg_path))[0]
+    if base_name.startswith('converted_grid_'):
+        base_name = base_name[len('converted_grid_'):]
+    grid_svg_path = os.path.join(project_root, 'output', 'svg', 'grid', f"{base_name}_grid.svg")
+    print(f"Looking for SVG at: {grid_svg_path}")
+    print(f"SVG path exists: {os.path.exists(grid_svg_path)}")
+    
+    # Try to find any SVG file in the grid directory if the matching one doesn't exist
+    if not os.path.exists(grid_svg_path):
+        grid_dir = os.path.join(project_root, 'output', 'svg', 'grid')
+        if os.path.exists(grid_dir):
+            svg_files = [f for f in os.listdir(grid_dir) if f.endswith('_grid.svg')]
+            if svg_files:
+                grid_svg_path = os.path.join(grid_dir, svg_files[0])
+                print(f"Found alternative SVG: {grid_svg_path}")
+    
+    if not os.path.exists(grid_svg_path):
+        print(f"No SVG file found in grid directory")
+        return "No wall scan found. Please scan your wall first.", 400
+    
+    with open(grid_svg_path, 'r') as f:
+        wall_svg = f.read()
+        # Clean up SVG content
+        wall_svg = (wall_svg
+            .replace('ns0:', '')  # Remove namespace prefix
+            .replace('xmlns:ns0', 'xmlns')  # Fix namespace declaration
+            .replace('<?xml version=\'1.0\' encoding=\'utf-8\'?>\n', '')  # Remove XML declaration
+        )
+        print(f"SVG content length: {len(wall_svg)}")
+        print("SVG content preview (first 1000 chars):")
+        print(wall_svg[:1000])
+    
+    # Get available grades
+    grades = ['5.6', '5.7', '5.8', '5.9', '5.10a', '5.10b', '5.10c', '5.10d', 
+             '5.11a', '5.11b', '5.11c', '5.11d', '5.12a', '5.12b', '5.12c', '5.12d']
+    
+    return render_template('route_create.html', 
+                         wall_svg=wall_svg,
+                         grades=grades)
 
 @app.route('/routes')
 def routes_page():
-    return render_template('routes.html')
+    # Get all routes and pass them to the template
+    routes_list = list_routes(app.config['ROUTES_FOLDER'])
+    # Get unique grades and authors for filters
+    grades = sorted(set(route.get('grade') for route in routes_list if route.get('grade')))
+    authors = sorted(set(route.get('author') for route in routes_list if route.get('author')))
+    return render_template('routes.html', routes=routes_list, grades=grades, authors=authors)
 
-@app.route('/routes', methods=['GET', 'POST'])
-def routes():
+@app.route('/routes/<route_id>')
+def route_view(route_id):
+    try:
+        route_data = load_route(os.path.join(app.config['ROUTES_FOLDER'], f"{route_id}.json"))
+        return render_template('route_view.html', route=route_data)
+    except FileNotFoundError:
+        return "Route not found", 404
+
+@app.route('/routes/<route_id>/edit')
+def route_edit(route_id):
+    try:
+        # Load route data
+        route_data = load_route(os.path.join(app.config['ROUTES_FOLDER'], f"{route_id}.json"))
+        
+        # Get the grid SVG file
+        grid_svg_path = os.path.join(project_root, 'output', 'svg', 'grid', 'treadwall_grid.svg')
+        if not os.path.exists(grid_svg_path):
+            return "No wall scan found. Please scan your wall first.", 400
+        
+        with open(grid_svg_path, 'r') as f:
+            wall_svg = f.read()
+        
+        # Get available grades
+        grades = ['5.6', '5.7', '5.8', '5.9', '5.10a', '5.10b', '5.10c', '5.10d', 
+                 '5.11a', '5.11b', '5.11c', '5.11d', '5.12a', '5.12b', '5.12c', '5.12d']
+        
+        return render_template('route_create.html', 
+                             route=route_data,
+                             wall_svg=wall_svg,
+                             grades=grades)
+    except FileNotFoundError:
+        return "Route not found", 404
+
+@app.route('/api/routes', methods=['GET', 'POST'])
+def api_routes():
     if request.method == 'POST':
         route_data = request.json
         try:
@@ -169,15 +286,33 @@ def routes():
     routes = list_routes(app.config['ROUTES_FOLDER'])
     return jsonify(routes)
 
-@app.route('/routes/<filename>', methods=['GET'])
-def get_route(filename):
-    try:
-        route_data = load_route(os.path.join(app.config['ROUTES_FOLDER'], filename))
-        return jsonify(route_data)
-    except FileNotFoundError:
-        return jsonify({'error': 'Route not found'}), 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+@app.route('/api/routes/<route_id>', methods=['GET', 'PUT', 'DELETE'])
+def api_route(route_id):
+    route_path = os.path.join(app.config['ROUTES_FOLDER'], f"{route_id}.json")
+    
+    if request.method == 'GET':
+        try:
+            route_data = load_route(route_path)
+            return jsonify(route_data)
+        except FileNotFoundError:
+            return jsonify({'error': 'Route not found'}), 404
+    
+    elif request.method == 'PUT':
+        try:
+            route_data = request.json
+            save_route(route_data, app.config['ROUTES_FOLDER'], filename=f"{route_id}.json")
+            return jsonify({'message': 'Route updated successfully'})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+    
+    elif request.method == 'DELETE':
+        try:
+            os.remove(route_path)
+            return jsonify({'message': 'Route deleted successfully'})
+        except FileNotFoundError:
+            return jsonify({'error': 'Route not found'}), 404
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
 
 if __name__ == '__main__':
     print(f"Template folder: {app.template_folder}")

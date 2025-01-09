@@ -1,1 +1,396 @@
- 
+{% extends "base.html" %}
+
+{% block title %}HoldSleuth - {{ 'Edit' if route else 'Create' }} Route{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h2>{{ 'Edit' if route else 'Create' }} Route</h2>
+        <p class="lead">{{ 'Edit existing' if route else 'Create a new' }} climbing route</p>
+    </div>
+</div>
+
+<div class="row route-editor-container">
+    <div class="col-md-8">
+        <!-- Route Editor -->
+        <div class="card mb-4 wall-container-wrapper" data-initial-holds="{{ route.holds|tojson if route else '[]' }}">
+            <div class="card-body d-flex flex-column">
+                <div class="wall-container flex-grow-1">
+                    <div id="wallScroller" class="wall-scroller">
+                        <!-- SVG wall with holds -->
+                        {{ wall_svg|safe }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hold Selection Legend -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Hold Types</h5>
+                <div class="d-flex gap-3 align-items-center">
+                    <div class="hold-type">
+                        <span class="hold-color" style="background-color: #0d6efd"></span>
+                        Regular Hold
+                    </div>
+                    <div class="hold-type">
+                        <span class="hold-color" style="background-color: #ffc107"></span>
+                        Foot Hold
+                    </div>
+                    <div class="hold-type">
+                        <span class="hold-color" style="background-color: #28a745"></span>
+                        Start Hold
+                    </div>
+                    <div class="hold-type">
+                        <span class="hold-color" style="background-color: #6f42c1"></span>
+                        Finish Hold
+                    </div>
+                </div>
+                <p class="text-muted mt-2">Hold SHIFT and drag to scroll. Click holds to cycle through types.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Route Details Form -->
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Route Details</h5>
+                <form id="routeForm">
+                    <div class="mb-3">
+                        <label for="routeName" class="form-label">Route Name</label>
+                        <input type="text" class="form-control" id="routeName" name="name" 
+                               value="{{ route.name if route else '' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="routeGrade" class="form-label">Grade</label>
+                        <select class="form-select" id="routeGrade" name="grade">
+                            <option value="">Select Grade</option>
+                            {% for grade in grades %}
+                            <option value="{{ grade }}" 
+                                    {{ 'selected' if route and route.grade == grade else '' }}>
+                                {{ grade }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="routeAuthor" class="form-label">Author</label>
+                        <input type="text" class="form-control" id="routeAuthor" name="author"
+                               value="{{ route.author if route else '' }}">
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            {{ 'Save Changes' if route else 'Create Route' }}
+                        </button>
+                        <a href="{{ url_for('routes_page') }}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.wall-container {
+    position: relative;
+    width: 100%;
+    height: 50vh;
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow-y: scroll;
+    overflow-x: hidden;
+}
+
+.wall-scroller {
+    position: relative;
+    width: 100%;
+    transform-origin: top center;
+    display: flex;
+    flex-direction: column;
+}
+
+.wall-scroller svg {
+    display: block;
+    width: 100%;
+    height: 100vh;
+    background-color: #ffffff;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.wall-scroller polygon {
+    cursor: pointer;
+    fill: #808080;
+    fill-opacity: 0.7;
+    stroke: #000000;
+    stroke-width: 1;
+    transition: all 0.2s ease-out;
+    vector-effect: non-scaling-stroke;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+.wall-scroller polygon:hover {
+    fill-opacity: 0.9;
+    transform: scale(1.02);
+}
+
+.wall-scroller polygon[data-type="start"] {
+    fill: #28a745 !important;
+    stroke: #000000;
+    fill-opacity: 0.9;
+}
+
+.wall-scroller polygon[data-type="foot"] {
+    fill: #ffc107 !important;
+    stroke: #000000;
+    fill-opacity: 0.9;
+}
+
+.wall-scroller polygon[data-type="regular"] {
+    fill: #0d6efd !important;
+    stroke: #000000;
+    fill-opacity: 0.9;
+}
+
+.wall-scroller polygon[data-type="finish"] {
+    fill: #6f42c1 !important;
+    stroke: #000000;
+    fill-opacity: 0.9;
+}
+
+/* Hide scrollbar but keep functionality */
+.wall-container::-webkit-scrollbar {
+    width: 0px;
+    background: transparent;
+}
+
+/* Ensure the wall container takes up more space in the layout */
+.route-editor-container {
+    height: calc(100vh - 200px);
+    min-height: 600px;
+    display: flex;
+    flex-direction: column;
+}
+
+.wall-container-wrapper {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Initialize constants and variables
+const HOLD_TYPES = ['', 'regular', 'foot', 'start', 'finish'];
+const initialHolds = JSON.parse(document.querySelector('.card').dataset.initialHolds);
+let selectedHolds = [...initialHolds];
+const WALL_HEIGHT = 100;
+const NUM_SEGMENTS = 10; // Increased to 10 segments to allow for longer routes
+let isPanning = false;
+
+// Create a map to store the route data
+// Key format: `${holdId}_${cycle}`, Value: type
+const routeHolds = new Map();
+
+// Initialize route data from existing route if editing
+if (selectedHolds.length > 0) {
+    selectedHolds.forEach(hold => {
+        const key = `${hold.id}_${hold.cycle || 0}`;
+        routeHolds.set(key, hold.type);
+    });
+}
+
+// Set up the wall segments
+const wallScroller = document.getElementById('wallScroller');
+const originalSvg = wallScroller.querySelector('svg');
+wallScroller.innerHTML = ''; // Clear the container
+
+// Function to prepare SVG for use
+function prepareSvgForUse(svg, cycleNum) {
+    svg.dataset.cycle = cycleNum.toString();
+    
+    // Ensure all polygons have necessary attributes and are clickable
+    svg.querySelectorAll('polygon').forEach((polygon, index) => {
+        // If polygon doesn't have a grid position, assign one
+        if (!polygon.dataset.gridPosition) {
+            polygon.dataset.gridPosition = `hold_${index}`;
+        }
+        
+        // Ensure x and y coordinates are set
+        if (!polygon.dataset.gridX) {
+            const points = polygon.getAttribute('points').split(' ')[0].split(',');
+            polygon.dataset.gridX = points[0];
+            polygon.dataset.gridY = points[1];
+        }
+        
+        // Add click handler
+        polygon.addEventListener('click', (e) => {
+            if (!e.shiftKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                handleHoldClick(polygon);
+            }
+        });
+        
+        // Make sure the polygon is styled properly
+        polygon.style.cursor = 'pointer';
+    });
+    
+    return svg;
+}
+
+// Create multiple wall segments
+for (let i = NUM_SEGMENTS - 1; i >= 0; i--) {
+    const svg = originalSvg.cloneNode(true);
+    prepareSvgForUse(svg, i);
+    wallScroller.appendChild(svg);
+}
+
+// Set the wall scroller height to accommodate all segments
+wallScroller.style.height = `${NUM_SEGMENTS * 100}%`;
+
+// Scroll to bottom initially
+requestAnimationFrame(() => {
+    const container = wallScroller.parentElement;
+    container.scrollTop = container.scrollHeight;
+});
+
+// Function to handle hold clicks
+function handleHoldClick(hold) {
+    if (isPanning) return;
+    
+    const holdId = hold.dataset.gridPosition;
+    if (!holdId) return;
+    
+    const cycle = parseInt(hold.closest('svg').dataset.cycle);
+    const key = `${holdId}_${cycle}`;
+    
+    const currentType = routeHolds.get(key) || '';
+    const currentIndex = HOLD_TYPES.indexOf(currentType);
+    const nextIndex = (currentIndex + 1) % HOLD_TYPES.length;
+    const nextType = HOLD_TYPES[nextIndex];
+    
+    if (nextType) {
+        // Add or update hold in route
+        routeHolds.set(key, nextType);
+        hold.dataset.type = nextType;
+        
+        // Update selectedHolds array for saving
+        const holdData = {
+            id: holdId,
+            type: nextType,
+            x: parseInt(hold.dataset.gridX),
+            y: parseInt(hold.dataset.gridY),
+            cycle: cycle
+        };
+        
+        const holdIndex = selectedHolds.findIndex(h => 
+            h.id === holdId && h.cycle === cycle);
+        
+        if (holdIndex === -1) {
+            selectedHolds.push(holdData);
+        } else {
+            selectedHolds[holdIndex] = holdData;
+        }
+    } else {
+        // Remove hold from route
+        routeHolds.delete(key);
+        delete hold.dataset.type;
+        
+        const holdIndex = selectedHolds.findIndex(h => 
+            h.id === holdId && h.cycle === cycle);
+        if (holdIndex !== -1) {
+            selectedHolds.splice(holdIndex, 1);
+        }
+    }
+}
+
+// Handle panning with shift+click and drag
+let startY = 0;
+let startScroll = 0;
+
+wallScroller.addEventListener('mousedown', (e) => {
+    if (e.shiftKey) {
+        isPanning = true;
+        startY = e.clientY;
+        startScroll = wallScroller.parentElement.scrollTop;
+        wallScroller.style.cursor = 'ns-resize';
+        e.preventDefault();
+    }
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    
+    const deltaY = e.clientY - startY;
+    const newScroll = startScroll - deltaY;
+    wallScroller.parentElement.scrollTop = newScroll;
+});
+
+document.addEventListener('mouseup', () => {
+    if (!isPanning) return;
+    isPanning = false;
+    wallScroller.style.cursor = 'default';
+});
+
+// Add click handlers to all holds
+document.querySelectorAll('.wall-scroller polygon').forEach(hold => {
+    hold.addEventListener('click', (e) => {
+        if (!e.shiftKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleHoldClick(hold);
+        }
+    });
+});
+
+// Handle form submission
+document.getElementById('routeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    // Validate that we have at least one start and one finish hold
+    const hasStart = selectedHolds.some(h => h.type === 'start');
+    const hasFinish = selectedHolds.some(h => h.type === 'finish');
+    
+    if (!hasStart || !hasFinish) {
+        alert('Route must have at least one start hold and one finish hold');
+        return;
+    }
+    
+    const formData = new FormData(e.target);
+    const routeData = {
+        name: formData.get('name'),
+        grade: formData.get('grade'),
+        author: formData.get('author'),
+        holds: selectedHolds,
+        created_at: new Date().toISOString()
+    };
+    
+    try {
+        const response = await fetch('/api/routes', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(routeData)
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to save route');
+        }
+        
+        window.location.href = '{{ url_for("routes_page") }}';
+    } catch (error) {
+        console.error('Error saving route:', error);
+        alert('Failed to save route. Please try again.');
+    }
+});
+</script>
+{% endblock %} 
