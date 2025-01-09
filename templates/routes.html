@@ -166,6 +166,65 @@ document.getElementById('confirmDelete').addEventListener('click', async () => {
     }
 });
 
+async function fetchAndDisplayRoutes(params = new URLSearchParams()) {
+    try {
+        const response = await axios.get(`/api/routes?${params.toString()}`);
+        const routes = response.data;
+        const routesList = document.getElementById('routesList');
+        
+        if (routes.length === 0) {
+            routesList.innerHTML = `
+                <div class="text-center py-5">
+                    <p class="text-muted">No routes found. Create your first route!</p>
+                    <a href="{{ url_for('route_create') }}" class="btn btn-primary">
+                        Create New Route
+                    </a>
+                </div>
+            `;
+            return;
+        }
+        
+        routesList.innerHTML = routes.map(route => `
+            <div class="route-card mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="card-title">${route.name}</h5>
+                                <p class="card-text">
+                                    ${route.grade ? `<span class="badge bg-primary me-2">${route.grade}</span>` : ''}
+                                    <small class="text-muted">
+                                        Created by ${route.author || 'Anonymous'} on 
+                                        ${new Date(route.created_at).toLocaleString()}
+                                    </small>
+                                </p>
+                            </div>
+                            <div class="btn-group">
+                                <a href="/routes/${route.id}" 
+                                   class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-eye"></i> View
+                                </a>
+                                <a href="/routes/${route.id}/edit" 
+                                   class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </a>
+                                <button type="button" 
+                                        class="btn btn-outline-danger btn-sm"
+                                        onclick="deleteRoute('${route.id}')">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error fetching routes:', error);
+        alert('Error fetching routes: ' + (error.response?.data?.error || 'Unknown error'));
+    }
+}
+
 document.getElementById('filterForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -175,7 +234,19 @@ document.getElementById('filterForm').addEventListener('submit', async (e) => {
         if (value) params.append(key, value);
     }
     
-    window.location.search = params.toString();
+    // Update URL without reloading
+    window.history.pushState({}, '', `?${params.toString()}`);
+    await fetchAndDisplayRoutes(params);
+});
+
+// Initial load with URL parameters
+const initialParams = new URLSearchParams(window.location.search);
+fetchAndDisplayRoutes(initialParams);
+
+// Handle browser back/forward
+window.addEventListener('popstate', () => {
+    const params = new URLSearchParams(window.location.search);
+    fetchAndDisplayRoutes(params);
 });
 </script>
 {% endblock %} 

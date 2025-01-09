@@ -302,8 +302,29 @@ def api_routes():
         except Exception as e:
             return jsonify({'error': str(e)}), 400
     
-    # GET request - list all routes
+    # GET request - list all routes with filtering
     routes = list_routes(app.config['ROUTES_FOLDER'])
+    
+    # Apply filters
+    grade = request.args.get('grade')
+    author = request.args.get('author')
+    sort = request.args.get('sort', 'created_desc')
+    
+    if grade:
+        routes = [r for r in routes if r.get('grade') == grade]
+    if author:
+        routes = [r for r in routes if r.get('author') == author]
+    
+    # Apply sorting
+    if sort == 'created_asc':
+        routes.sort(key=lambda x: x.get('created_at', ''))
+    elif sort == 'created_desc':
+        routes.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+    elif sort == 'name':
+        routes.sort(key=lambda x: x.get('name', '').lower())
+    elif sort == 'grade':
+        routes.sort(key=lambda x: x.get('grade', ''))
+    
     return jsonify(routes)
 
 @app.route('/api/routes/<route_id>', methods=['GET', 'PUT', 'DELETE'])
