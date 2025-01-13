@@ -116,6 +116,7 @@ output/grid/
 image_detection/model/*
 !image_detection/model/.gitkeep
 image_detection/images/*
+!image_detection/images/.gitkeep
 !image_detection/images/treadwall.jpg
 *.jpg
 *.jpeg
