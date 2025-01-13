@@ -27,7 +27,7 @@ class ProjectionDisplay:
         print("Starting projection display...")
         pygame.init()
         
-        # Set up display in windowed mode with 5:3 aspect ratio
+        # Set up display in windowed mode with 5:3 aspect ratio for wide display
         # Using 1000x600 as default size (maintains 5:3 ratio)
         self.width = 1000
         self.height = 600
@@ -60,10 +60,10 @@ class ProjectionDisplay:
         """Recalculate projection area based on current window size"""
         self.width, self.height = self.screen.get_size()
         self.proj_width = self.width - 40
-        self.proj_height = int(self.proj_width * (5/3))
+        self.proj_height = int(self.proj_width * (3/5))
         if self.proj_height > self.height - 40:
             self.proj_height = self.height - 40
-            self.proj_width = int(self.proj_height * (3/5))
+            self.proj_width = int(self.proj_height * (5/3))
             
         self.proj_x = (self.width - self.proj_width) // 2
         self.proj_y = (self.height - self.proj_height) // 2
@@ -78,7 +78,7 @@ class ProjectionDisplay:
             # Switch to fullscreen mode using the current display resolution
             self.screen = pygame.display.set_mode((display_info.current_w, display_info.current_h), pygame.FULLSCREEN)
         else:
-            # Switch back to windowed mode
+            # Switch back to windowed mode with wide dimensions
             self.screen = pygame.display.set_mode((1000, 600), pygame.RESIZABLE)
         
         # Update projection area for new window size
@@ -147,29 +147,45 @@ class ProjectionDisplay:
 
         # Draw route if loaded
         if hasattr(self, 'current_route') and self.current_route:
-            segment_height = self.proj_height / 40
+            segment_width = self.proj_width / 40  # Each segment is 40 units wide
             
             # Draw holds
             for hold in self.current_route.get('holds', []):
-                # Calculate hold position
-                hold_y = hold['y'] * segment_height
-                hold_x = self.proj_x + (hold['x'] * self.proj_width / 8)
+                # In the source coordinate system:
+                # x goes from 0 (right) to 40 (left) within a segment
+                # y goes from 0 (top) to 7 (bottom)
                 
-                # Calculate segment position
-                segment_start_y = self.proj_y - (hold['segment'] * 40 * segment_height)
-                adjusted_y = segment_start_y + hold_y + (self.wall_position * segment_height)
+                # Calculate base position within segment
+                hold_x = hold['x']  # 0-7 for columns
+                hold_y = hold['y']  # Position within column
+                segment = hold['segment']
+                
+                # Convert to screen coordinates
+                # Start from right edge (proj_x + proj_width) and move left
+                screen_x = (self.proj_x + self.proj_width) - (hold_y * segment_width)
+                
+                # Y coordinate goes top to bottom, scaled to height
+                screen_y = self.proj_y + (hold_x * self.proj_height / 8)
+                
+                # Apply segment offset (segments move leftward)
+                # Subtract wall position to move left
+                segment_offset = (segment * 40 + self.wall_position) * segment_width
+                screen_x -= segment_offset
                 
                 # Only draw if within projection area
-                if self.proj_y <= adjusted_y <= self.proj_y + self.proj_height:
-                    self.draw_hold(int(hold_x), int(adjusted_y), hold['type'])
+                if self.proj_x <= screen_x <= self.proj_x + self.proj_width:
+                    self.draw_hold(int(screen_x), int(screen_y), hold['type'])
             
             # Draw segment boundaries (optional)
             for seg in range(3):  # Assuming max 3 segments
-                seg_y = self.proj_y - (seg * 40 * segment_height) + (self.wall_position * segment_height)
-                if self.proj_y <= seg_y <= self.proj_y + self.proj_height:
+                # Calculate segment line x position
+                # Start from right edge and move left with segments
+                seg_x = (self.proj_x + self.proj_width) - ((seg * 40 + self.wall_position) * segment_width)
+                
+                if self.proj_x <= seg_x <= self.proj_x + self.proj_width:
                     pygame.draw.line(self.screen, (51, 51, 51),
-                                   (self.proj_x, int(seg_y)),
-                                   (self.proj_x + self.proj_width, int(seg_y)))
+                                   (int(seg_x), self.proj_y),
+                                   (int(seg_x), self.proj_y + self.proj_height))
         
         # Update display
         pygame.display.flip()
