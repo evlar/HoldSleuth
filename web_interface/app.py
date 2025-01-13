@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template, send_file, url_for
 import os
 import sys
+import json
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -8,12 +9,13 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from werkzeug.utils import secure_filename
-from utils.scanner import get_initial_detections, process_final_holds
+from web_interface.utils.scanner import get_initial_detections, process_final_holds
 from utils.route_manager import save_route, load_route, list_routes
 import cv2
 from image_detection.yolo_hold_detector import YOLOHoldDetector
 from datetime import datetime
 from web_interface.utils.projection_system import projection_system
+from web_interface.utils.projection_client import ProjectionClient
 
 # Create Flask app with explicit template folder
 app = Flask(__name__, 
@@ -48,6 +50,11 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# Initialize projection client
+projection_client = ProjectionClient(
+    host='RASPBERRY_PI_IP'  # Raspberry Pi's IP address
+)
 
 @app.route('/')
 def index():
@@ -404,6 +411,59 @@ def route_project_test(route_id):
         return render_template('projection_test.html', route=route_data)
     except FileNotFoundError:
         return "Route not found", 404
+
+@app.route('/api/projection/display/start', methods=['POST'])
+def start_projection_display():
+    """Start projecting the route on the external display."""
+    try:
+        print("\nStarting projection display...")
+        data = request.get_json()
+        route_id = data.get('route_id')
+        print(f"Route ID: {route_id}")
+        
+        # Load route data
+        route_path = os.path.join(app.config['ROUTES_FOLDER'], f"{route_id}.json")
+        print(f"Loading route from: {route_path}")
+        if not os.path.exists(route_path):
+            print(f"Route file not found: {route_path}")
+            return jsonify({'error': 'Route not found'}), 404
+            
+        with open(route_path, 'r') as f:
+            route_data = json.load(f)
+        print(f"Loaded route: {route_data.get('name')} with {len(route_data.get('holds', []))} holds")
+        
+        # Send route to projection display
+        print("Sending route to projection display...")
+        projection_client.send_route(route_data)
+        print("Route sent successfully")
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"Error in start_projection_display: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projection/display/position', methods=['POST'])
+def update_projection_position():
+    """Update the wall position on the external display."""
+    try:
+        data = request.get_json()
+        position = data.get('position', 0)
+        print(f"Updating position to: {position}")
+        projection_client.send_position(float(position))
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print(f"Error in update_projection_position: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projection/display/hold_size', methods=['POST'])
+def update_hold_size():
+    """Update the hold size on the external display."""
+    try:
+        data = request.get_json()
+        size = data.get('size', 20)
+        projection_client.send_hold_size(int(size))
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print(f"Template folder: {app.template_folder}")

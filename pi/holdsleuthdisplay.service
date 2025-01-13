@@ -1,0 +1,13 @@
+[Unit]
+Description=HoldSleuth Projection Display
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/pi/projection_display.py
+WorkingDirectory=/home/pi
+User=pi
+Environment=DISPLAY=:0
+Restart=always
+
+[Install]
+WantedBy=multi-user.target 

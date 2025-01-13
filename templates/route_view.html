@@ -23,6 +23,9 @@
         <a href="{{ url_for('route_project_test', route_id=route.id) }}" class="btn btn-success me-2" target="_blank">
             <i class="bi bi-display"></i> Test Projection
         </a>
+        <button id="startPygameProjection" class="btn btn-primary me-2">
+            <i class="bi bi-projector"></i> Start Pygame Projection
+        </button>
         <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#projectionModal">
             <i class="bi bi-projector"></i> Project Route
         </button>
@@ -210,16 +213,16 @@
 
 {% block extra_js %}
 <script>
+// Make route data available globally
+const route = JSON.parse('{{ route|tojson|safe }}');
+console.log('Route data:', route);
+
 // Initialize the route visualization
 document.addEventListener('DOMContentLoaded', function() {
     const NUM_SEGMENTS = 10;
     let isPanning = false;
     let startY = 0;
     let startScroll = 0;
-    
-    // Parse route holds data
-    var routeHolds = JSON.parse('{{ route.holds|tojson|safe }}');
-    console.log('Route holds:', routeHolds);
     
     // Get the original SVG content
     var wallScroller = document.getElementById('wallScroller');
@@ -261,7 +264,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const y = parseInt(polygon.dataset.gridY);
             
             // Check if this polygon matches any hold in this segment
-            const matchingHold = routeHolds.find(hold => {
+            const matchingHold = route.holds.find(hold => {
                 const matches = hold.segment === i && 
                               hold.x === x && 
                               hold.y === y;
@@ -394,6 +397,67 @@ document.getElementById('projectionModal').addEventListener('hidden.bs.modal', f
     if (statusUpdateInterval) {
         clearInterval(statusUpdateInterval);
         statusUpdateInterval = null;
+    }
+});
+
+// Add event listener for Pygame projection
+document.getElementById('startPygameProjection').addEventListener('click', async function() {
+    try {
+        console.log('Button clicked - Starting Pygame projection...');
+        console.log('Route ID:', route.id);
+        
+        // Start projection
+        const response = await fetch('/api/projection/display/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                route_id: route.id
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const result = await response.json();
+        console.log('Projection start response:', result);
+
+        // Set up interval to update position
+        let wallPosition = 0;
+        const updateInterval = setInterval(async () => {
+            wallPosition += 0.1;  // Adjust speed as needed
+            console.log('Updating position:', wallPosition);
+            
+            try {
+                const posResponse = await fetch('/api/projection/display/position', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        position: wallPosition
+                    })
+                });
+                
+                if (!posResponse.ok) {
+                    throw new Error(`HTTP error! status: ${posResponse.status}`);
+                }
+                const posResult = await posResponse.json();
+                console.log('Position update response:', posResult);
+            } catch (error) {
+                console.error('Error updating position:', error);
+                clearInterval(updateInterval);
+            }
+        }, 100);  // Update every 100ms
+
+        // Clean up interval when leaving page
+        window.addEventListener('beforeunload', () => {
+            clearInterval(updateInterval);
+        });
+    } catch (error) {
+        console.error('Error starting projection:', error);
+        alert('Failed to start projection. Please check if the projection display is running.');
     }
 });
 </script>
