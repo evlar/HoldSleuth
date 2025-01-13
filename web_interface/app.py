@@ -1,11 +1,19 @@
 from flask import Flask, request, jsonify, render_template, send_file, url_for
 import os
+import sys
+
+# Add project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
 from werkzeug.utils import secure_filename
 from utils.scanner import get_initial_detections, process_final_holds
 from utils.route_manager import save_route, load_route, list_routes
 import cv2
 from image_detection.yolo_hold_detector import YOLOHoldDetector
 from datetime import datetime
+from web_interface.utils.projection_system import projection_system
 
 # Create Flask app with explicit template folder
 app = Flask(__name__, 
@@ -356,6 +364,46 @@ def api_route(route_id):
             return jsonify({'error': 'Route not found'}), 404
         except Exception as e:
             return jsonify({'error': str(e)}), 400
+
+# Add projection endpoints
+@app.route('/api/projection/start/<route_id>', methods=['POST'])
+def start_projection(route_id):
+    try:
+        # Load the route
+        route = load_route(route_id)
+        if not route:
+            return jsonify({'error': 'Route not found'}), 404
+        
+        # Start projection
+        projection_system.start_projection(route)
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projection/stop', methods=['POST'])
+def stop_projection():
+    try:
+        projection_system.stop_projection()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projection/status')
+def get_projection_status():
+    try:
+        status = projection_system.get_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Add projection test endpoint
+@app.route('/routes/<route_id>/project-test')
+def route_project_test(route_id):
+    try:
+        route_data = load_route(os.path.join(app.config['ROUTES_FOLDER'], f"{route_id}.json"))
+        return render_template('projection_test.html', route=route_data)
+    except FileNotFoundError:
+        return "Route not found", 404
 
 if __name__ == '__main__':
     print(f"Template folder: {app.template_folder}")

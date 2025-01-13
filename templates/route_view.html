@@ -20,6 +20,12 @@
         </p>
     </div>
     <div class="col-md-4 text-end">
+        <a href="{{ url_for('route_project_test', route_id=route.id) }}" class="btn btn-success me-2" target="_blank">
+            <i class="bi bi-display"></i> Test Projection
+        </a>
+        <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#projectionModal">
+            <i class="bi bi-projector"></i> Project Route
+        </button>
         <a href="{{ url_for('routes_page') }}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Back to Routes
         </a>
@@ -72,6 +78,47 @@
                 <p class="text-muted mb-0">
                     Total Holds: {{ route.holds|length }}
                 </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Projection Control Modal -->
+<div class="modal fade" id="projectionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Project Route</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Projection Status</label>
+                    <div class="d-flex align-items-center">
+                        <span id="projectionStatus" class="badge bg-secondary me-2">Not Active</span>
+                        <button type="button" id="toggleProjection" class="btn btn-primary btn-sm">
+                            Start Projection
+                        </button>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Wall Position</label>
+                    <div class="progress">
+                        <div id="wallPositionBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <small class="text-muted">Current segment: <span id="currentSegment">0</span></small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Wall Angle</label>
+                    <div id="wallAngle">Not available</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Last Calibration</label>
+                    <div id="lastCalibration">Not available</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -266,6 +313,88 @@ document.addEventListener('DOMContentLoaded', function() {
         isPanning = false;
         wallScroller.style.cursor = 'default';
     });
+});
+
+// Add projection control code
+let projectionActive = false;
+let statusUpdateInterval = null;
+
+document.getElementById('toggleProjection').addEventListener('click', async function() {
+    try {
+        if (!projectionActive) {
+            // Start projection
+            const response = await fetch(`/api/projection/start/${route.id}`, {
+                method: 'POST'
+            });
+            if (!response.ok) throw new Error('Failed to start projection');
+            
+            projectionActive = true;
+            this.textContent = 'Stop Projection';
+            document.getElementById('projectionStatus').className = 'badge bg-success me-2';
+            document.getElementById('projectionStatus').textContent = 'Active';
+            
+            // Start status updates
+            statusUpdateInterval = setInterval(updateProjectionStatus, 1000);
+        } else {
+            // Stop projection
+            const response = await fetch('/api/projection/stop', {
+                method: 'POST'
+            });
+            if (!response.ok) throw new Error('Failed to stop projection');
+            
+            projectionActive = false;
+            this.textContent = 'Start Projection';
+            document.getElementById('projectionStatus').className = 'badge bg-secondary me-2';
+            document.getElementById('projectionStatus').textContent = 'Not Active';
+            
+            // Stop status updates
+            if (statusUpdateInterval) {
+                clearInterval(statusUpdateInterval);
+                statusUpdateInterval = null;
+            }
+        }
+    } catch (error) {
+        console.error('Projection control error:', error);
+        alert('Error controlling projection: ' + error.message);
+    }
+});
+
+async function updateProjectionStatus() {
+    try {
+        const response = await fetch('/api/projection/status');
+        if (!response.ok) throw new Error('Failed to get status');
+        
+        const status = await response.json();
+        
+        // Update wall position
+        const segment = Math.floor(status.wall_position / 40);
+        const progress = (status.wall_position % 40) / 40 * 100;
+        document.getElementById('wallPositionBar').style.width = `${progress}%`;
+        document.getElementById('currentSegment').textContent = segment;
+        
+        // Update wall angle
+        document.getElementById('wallAngle').textContent = 
+            status.wall_angle !== null ? `${status.wall_angle.toFixed(1)}°` : 'Not available';
+        
+        // Update last calibration
+        document.getElementById('lastCalibration').textContent = 
+            status.last_calibration ? new Date(status.last_calibration).toLocaleString() : 'Not available';
+        
+    } catch (error) {
+        console.error('Status update error:', error);
+        if (statusUpdateInterval) {
+            clearInterval(statusUpdateInterval);
+            statusUpdateInterval = null;
+        }
+    }
+}
+
+// Clean up interval when modal is closed
+document.getElementById('projectionModal').addEventListener('hidden.bs.modal', function() {
+    if (statusUpdateInterval) {
+        clearInterval(statusUpdateInterval);
+        statusUpdateInterval = null;
+    }
 });
 </script>
 {% endblock %} 

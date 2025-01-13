@@ -9,3 +9,10 @@ The next steps would be to:
     - Route visualization
     - AJAX communication with the backend
     - Would you like me to proceed with creating the frontend components?
+
+
+To complete the integration, you'll need to:
+Connect the physical sensors (inclinometer, distance sensor) to update wall_position and wall_angle
+Implement the actual projection output (likely using a graphics library to render to the projector)
+Add calibration functionality to align the projector with the wall
+Would you like me to help with any of these next steps?
