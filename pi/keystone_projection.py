@@ -38,6 +38,9 @@ class ProjectionDisplay:
         # Track fullscreen state
         self.is_fullscreen = False
         
+        # Keystone adjustment (0 = no adjustment, positive = right side wider, negative = left side wider)
+        self.keystone = 0.0  # Range: -1.0 to 1.0
+        
         # Calculate projection area (5:3 aspect ratio)
         self.update_projection_area()
         
@@ -131,80 +134,112 @@ class ProjectionDisplay:
         
         print("Network thread stopping")
 
+    def adjust_keystone(self, amount):
+        """Adjust the keystone value within bounds."""
+        self.keystone = max(-1.0, min(1.0, self.keystone + amount))
+        print(f"Keystone adjusted to: {self.keystone}")
+
+    def apply_keystone(self, x: int, y: int) -> tuple[int, int]:
+        """Apply keystone transformation to a point.
+        Creates a proper trapezoidal correction where one side is taller than the other,
+        and the content is scaled appropriately."""
+        # Calculate relative position within projection area
+        rel_x = (x - self.proj_x) / self.proj_width
+        rel_y = (y - self.proj_y) / self.proj_height
+        
+        # Calculate the height at this x position
+        # At rel_x = 0 (left), height is scaled by (1 - keystone)
+        # At rel_x = 1 (right), height is scaled by (1 + keystone)
+        scale_factor = 1.0 + (self.keystone * (2 * rel_x - 1))
+        
+        # Calculate new y position based on the scaled height
+        # Center point of each vertical line stays fixed
+        scaled_y = self.proj_y + (self.proj_height * 0.5) + ((rel_y - 0.5) * self.proj_height * scale_factor)
+        
+        return x, int(scaled_y), scale_factor
+
     def draw_hold(self, x: int, y: int, hold_type: str):
+        """Draw a hold with keystone correction."""
+        adjusted_x, adjusted_y, scale_factor = self.apply_keystone(x, y)
+        
+        # Scale the hold size based on the keystone transformation
+        adjusted_size = int(self.hold_size * scale_factor)
+        
         color = self.HOLD_COLORS.get(hold_type, self.HOLD_COLORS['regular'])
-        pygame.draw.circle(self.screen, color, (x, y), self.hold_size)
-        pygame.draw.circle(self.screen, (255, 255, 255), (x, y), self.hold_size, 2)
+        pygame.draw.circle(self.screen, color, (adjusted_x, adjusted_y), adjusted_size)
+        pygame.draw.circle(self.screen, (255, 255, 255), (adjusted_x, adjusted_y), adjusted_size, 2)
 
     def render(self):
         """Render the current frame."""
         # Clear screen
         self.screen.fill((0, 0, 0))
         
-        # Draw projection border
-        pygame.draw.rect(self.screen, (255, 255, 255), 
-                        (self.proj_x, self.proj_y, self.proj_width, self.proj_height), 2)
+        # Draw projection border with keystone
+        # Draw grid matching climbing wall dimensions (20 units wide x 8 units tall)
+        
+        # Draw horizontal lines (8 divisions for height)
+        for i in range(9):  # 0 to 8 inclusive
+            y = self.proj_y + (i * self.proj_height / 8)
+            for x in range(self.proj_x, self.proj_x + self.proj_width, 10):
+                start = self.apply_keystone(x, int(y))[0:2]
+                end = self.apply_keystone(min(x + 10, self.proj_x + self.proj_width), int(y))[0:2]
+                pygame.draw.line(self.screen, (51, 51, 51), start, end)
+        
+        # Draw vertical lines (20 divisions for width - half a segment)
+        for i in range(21):  # 0 to 20 inclusive
+            x = self.proj_x + (i * self.proj_width / 20)
+            top_point = self.apply_keystone(int(x), self.proj_y)[0:2]
+            bottom_point = self.apply_keystone(int(x), self.proj_y + self.proj_height)[0:2]
+            pygame.draw.line(self.screen, (51, 51, 51), top_point, bottom_point)
+        
+        # Draw border
+        border_points = [
+            self.apply_keystone(self.proj_x, self.proj_y)[0:2],  # Top left
+            self.apply_keystone(self.proj_x + self.proj_width, self.proj_y)[0:2],  # Top right
+            self.apply_keystone(self.proj_x + self.proj_width, self.proj_y + self.proj_height)[0:2],  # Bottom right
+            self.apply_keystone(self.proj_x, self.proj_y + self.proj_height)[0:2],  # Bottom left
+        ]
+        pygame.draw.lines(self.screen, (255, 255, 255), True, border_points, 2)
 
         # Draw route if loaded
         if hasattr(self, 'current_route') and self.current_route:
-            # Each segment is 40 units, but we only show 20 units at a time
-            segment_width = self.proj_width / 20  # Scale to show only 20 units
+            segment_width = self.proj_width / 20  # Each visible segment is 20 units wide
             
-            # Debug info
-            print("\nRendering route:", self.current_route.get('name'))
-            print(f"Projection area: {self.proj_width}x{self.proj_height} at ({self.proj_x}, {self.proj_y})")
-            print(f"Segment width: {segment_width} pixels (showing 20 units)")
-            print(f"Wall position: {self.wall_position}")
-            
-            # Sort holds by segment and y position for debugging
-            holds = sorted(self.current_route.get('holds', []), 
-                         key=lambda h: (h['segment'], h['y']))
+            # Draw segment boundaries
+            for seg in range(3):  # Assuming max 3 segments
+                # Calculate segment line x position
+                # Start from right edge and move left with segments
+                seg_x = (self.proj_x + self.proj_width) - ((seg * 20 + self.wall_position) * segment_width)
+                
+                if self.proj_x <= seg_x <= self.proj_x + self.proj_width:
+                    # Draw segment line with keystone correction
+                    for y in range(self.proj_y, self.proj_y + self.proj_height, 10):
+                        start = self.apply_keystone(int(seg_x), y)[0:2]
+                        end = self.apply_keystone(int(seg_x), min(y + 10, self.proj_y + self.proj_height))[0:2]
+                        pygame.draw.line(self.screen, (51, 51, 51), start, end)
             
             # Draw holds
-            for hold in holds:
-                # In the source coordinate system:
-                # x goes from 0 (right) to 40 (left) within a segment
-                # y goes from 0 (top) to 7 (bottom)
-                
+            for hold in self.current_route.get('holds', []):
                 # Calculate base position within segment
                 hold_x = hold['x']  # 0-7 for columns
-                hold_y = hold['y']  # Position within column (0-39)
+                hold_y = hold['y']  # Position within column
                 segment = hold['segment']
                 
                 # Convert to screen coordinates
                 # Start from right edge (proj_x + proj_width) and move left
-                # Scale the y position to show only 20 units at a time
                 screen_x = (self.proj_x + self.proj_width) - (hold_y * segment_width)
                 
                 # Y coordinate goes top to bottom, scaled to height
                 screen_y = self.proj_y + (hold_x * self.proj_height / 8)
                 
                 # Apply segment offset (segments move leftward)
-                # Each segment is 40 units, so multiply by 2 to maintain proper spacing
-                segment_offset = (segment * 40 + self.wall_position) * segment_width
+                # Subtract wall position to move left
+                segment_offset = (segment * 20 + self.wall_position) * segment_width
                 screen_x -= segment_offset
                 
-                # Debug info for each hold
-                print(f"Hold: seg={segment} x={hold_x} y={hold_y} type={hold['type']}")
-                print(f"  Screen pos: ({int(screen_x)}, {int(screen_y)})")
-                
-                # Only draw if within projection area and within visible 20 units
-                if (self.proj_x <= screen_x <= self.proj_x + self.proj_width and
-                    0 <= (hold_y - (segment * 40 + self.wall_position)) < 20):  # Only show 20 units
+                # Only draw if within projection area
+                if self.proj_x <= screen_x <= self.proj_x + self.proj_width:
                     self.draw_hold(int(screen_x), int(screen_y), hold['type'])
-                else:
-                    print("  Hold outside projection area or visible range")
-            
-            # Draw segment boundaries (optional)
-            for seg in range(3):  # Assuming max 3 segments
-                # Calculate segment line x position
-                # Start from right edge and move left with segments
-                seg_x = (self.proj_x + self.proj_width) - ((seg * 40 + self.wall_position) * segment_width)
-                
-                if self.proj_x <= seg_x <= self.proj_x + self.proj_width:
-                    pygame.draw.line(self.screen, (51, 51, 51),
-                                   (int(seg_x), self.proj_y),
-                                   (int(seg_x), self.proj_y + self.proj_height))
         
         # Update display
         pygame.display.flip()
@@ -229,6 +264,11 @@ class ProjectionDisplay:
                             self.running = False
                         elif event.key == pygame.K_f:
                             self.toggle_fullscreen()
+                        # Add keystone adjustment controls
+                        elif event.key == pygame.K_LEFT:
+                            self.adjust_keystone(-0.1)  # Adjust left
+                        elif event.key == pygame.K_RIGHT:
+                            self.adjust_keystone(0.1)   # Adjust right
                 
                 # Render the current frame
                 self.render()
