@@ -115,7 +115,8 @@ output/grid/
 !models/yolov8n.pt
 image_detection/model/*
 !image_detection/model/.gitkeep
-image_detection/images/
+image_detection/images/*
+!image_detection/images/treadwall.jpg
 *.jpg
 *.jpeg
 *.png
