@@ -2,6 +2,10 @@ from flask import Flask, request, jsonify, render_template, send_file, url_for
 import os
 import sys
 import json
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -53,7 +57,7 @@ def allowed_file(filename):
 
 # Initialize projection client
 projection_client = ProjectionClient(
-    host='RASPBERRY_PI_IP'  # Raspberry Pi's IP address
+    host=os.getenv('RASPBERRY_PI_IP', 'raspberrypi.local')  # Get IP from environment variable, fallback to raspberrypi.local
 )
 
 @app.route('/')

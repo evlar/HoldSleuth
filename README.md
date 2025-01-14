@@ -114,6 +114,57 @@ While you can use Python's venv, we recommend using Conda as it handles deep lea
 
 4. Download required model files as described in the "Required Model Files" section.
 
+## Environment Configuration
+
+### Raspberry Pi Connection
+The application needs to communicate with a Raspberry Pi for projection functionality. You can configure the connection in two ways:
+
+1. Using a `.env` file (recommended):
+   ```bash
+   # Create a .env file in the project root
+   echo "RASPBERRY_PI_IP=your.pi.ip.address" >> .env
+   ```
+
+2. Or set the environment variable directly:
+   ```bash
+   export RASPBERRY_PI_IP=your.pi.ip.address
+   ```
+
+If no IP is configured, the application will default to using `raspberrypi.local`.
+
+Note: The `.env` file is ignored by git to keep sensitive information out of version control.
+
+### Raspberry Pi Setup
+The projection display runs on a Raspberry Pi. To set it up:
+
+1. Clone the repository on your Raspberry Pi:
+   ```bash
+   git clone <repository-url>
+   cd holdsleuth
+   ```
+
+2. Install the Raspberry Pi dependencies:
+   ```bash
+   cd pi
+   pip install -r requirements.txt
+   ```
+
+3. Run the projection display:
+   - For basic display:
+     ```bash
+     python projection_display.py
+     ```
+   - For display with keystone correction:
+     ```bash
+     python keystone_projection.py
+     ```
+
+Controls:
+- Press `F` to toggle fullscreen
+- Press `ESC` to exit
+- In keystone mode:
+  - Use `LEFT/RIGHT` arrow keys to adjust keystone correction
+
 ## Project Structure
 
 ```

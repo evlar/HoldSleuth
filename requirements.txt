@@ -11,3 +11,4 @@ python-dateutil>=2.8.2
 matplotlib>=3.7.0
 torch>=2.0.0
 segment-anything 
+python-dotenv==1.0.0 
