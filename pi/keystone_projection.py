@@ -29,11 +29,15 @@ class ProjectionDisplay:
         
         # Set up display in windowed mode with 3:5 aspect ratio for tall display
         # Using 600x1000 as default size (maintains 3:5 ratio)
-        self.width = 600
-        self.height = 1000
-        self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
+        # Swap dimensions for 90-degree rotation
+        self.base_width = 600
+        self.base_height = 1000
+        # Create the actual display surface (swapped dimensions for 90° rotation)
+        self.screen = pygame.display.set_mode((self.base_height, self.base_width), pygame.RESIZABLE)
+        # Create a render surface for pre-rotation drawing
+        self.render_surface = pygame.Surface((self.base_width, self.base_height))
         pygame.display.set_caption("HoldSleuth Projection Display")
-        print(f"Created window: {self.width}x{self.height}")
+        print(f"Created window: {self.base_width}x{self.base_height} (rotated)")
         
         # Track fullscreen state
         self.is_fullscreen = False
@@ -61,7 +65,12 @@ class ProjectionDisplay:
 
     def update_projection_area(self):
         """Recalculate projection area based on current window size"""
-        self.width, self.height = self.screen.get_size()
+        # Get the rotated dimensions from screen
+        rotated_width, rotated_height = self.screen.get_size()
+        # Swap back for internal calculations
+        self.width = rotated_height
+        self.height = rotated_width
+        
         self.proj_height = self.height - 40
         self.proj_width = int(self.proj_height * (3/5))
         if self.proj_width > self.width - 40:
@@ -70,6 +79,9 @@ class ProjectionDisplay:
             
         self.proj_x = (self.width - self.proj_width) // 2
         self.proj_y = (self.height - self.proj_height) // 2
+        
+        # Update render surface size
+        self.render_surface = pygame.Surface((self.width, self.height))
         print(f"Updated projection area: {self.proj_width}x{self.proj_height} at ({self.proj_x}, {self.proj_y})")
 
     def toggle_fullscreen(self):
@@ -78,11 +90,33 @@ class ProjectionDisplay:
         if self.is_fullscreen:
             # Get the current display info
             display_info = pygame.display.Info()
-            # Switch to fullscreen mode using the current display resolution
-            self.screen = pygame.display.set_mode((display_info.current_w, display_info.current_h), pygame.FULLSCREEN)
+            screen_width = display_info.current_w
+            screen_height = display_info.current_h
+            
+            # Calculate dimensions that maintain 3:5 aspect ratio
+            # Remember we're rotated 90 degrees, so width:height should be 5:3
+            target_ratio = 5/3  # Width:Height ratio we want after rotation
+            current_ratio = screen_width / screen_height
+            
+            if current_ratio > target_ratio:
+                # Screen is too wide, use height to calculate width
+                new_width = int(screen_height * target_ratio)
+                new_height = screen_height
+            else:
+                # Screen is too tall, use width to calculate height
+                new_width = screen_width
+                new_height = int(screen_width / target_ratio)
+            
+            # Switch to fullscreen mode
+            self.screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
+            # Store the dimensions for centered rendering
+            self.fullscreen_dims = (new_width, new_height)
+            self.fullscreen_offset = ((screen_width - new_width) // 2, (screen_height - new_height) // 2)
         else:
-            # Switch back to windowed mode with wide dimensions
-            self.screen = pygame.display.set_mode((1000, 600), pygame.RESIZABLE)
+            # Switch back to windowed mode with swapped dimensions
+            self.screen = pygame.display.set_mode((self.base_height, self.base_width), pygame.RESIZABLE)
+            self.fullscreen_dims = None
+            self.fullscreen_offset = None
         
         # Update projection area for new window size
         self.update_projection_area()
@@ -171,7 +205,8 @@ class ProjectionDisplay:
 
     def render(self):
         """Render the current frame."""
-        # Clear screen
+        # Clear render surface and main screen
+        self.render_surface.fill((0, 0, 0))
         self.screen.fill((0, 0, 0))
         
         # Calculate spacing for rows and columns
@@ -184,7 +219,7 @@ class ProjectionDisplay:
             x = self.proj_x + (i * col_spacing)
             top_point = self.apply_keystone(int(x), self.proj_y)[0:2]
             bottom_point = self.apply_keystone(int(x), self.proj_y + self.proj_height)[0:2]
-            pygame.draw.line(self.screen, (51, 51, 51), top_point, bottom_point)
+            pygame.draw.line(self.render_surface, (51, 51, 51), top_point, bottom_point)
         
         # Horizontal lines (21 lines for 20 rows)
         for i in range(21):
@@ -192,7 +227,7 @@ class ProjectionDisplay:
             for x in range(self.proj_x, self.proj_x + self.proj_width, 10):
                 start = self.apply_keystone(x, int(y))[0:2]
                 end = self.apply_keystone(min(x + 10, self.proj_x + self.proj_width), int(y))[0:2]
-                pygame.draw.line(self.screen, (51, 51, 51), start, end)
+                pygame.draw.line(self.render_surface, (51, 51, 51), start, end)
         
         # Draw border
         border_points = [
@@ -201,12 +236,11 @@ class ProjectionDisplay:
             self.apply_keystone(self.proj_x + self.proj_width, self.proj_y + self.proj_height)[0:2],  # Bottom right
             self.apply_keystone(self.proj_x, self.proj_y + self.proj_height)[0:2],  # Bottom left
         ]
-        pygame.draw.lines(self.screen, (255, 255, 255), True, border_points, 2)
+        pygame.draw.lines(self.render_surface, (255, 255, 255), True, border_points, 2)
 
         # Draw route if loaded
         if hasattr(self, 'current_route') and self.current_route:
             # Calculate which segments are visible based on wall_position
-            # wall_position determines how far we've scrolled up
             base_segment = int(self.wall_position / 40)  # Current base segment
             segment_progress = (self.wall_position % 40) / 40  # Progress through current segment
             
@@ -237,7 +271,25 @@ class ProjectionDisplay:
                     
                     # Only draw if within projection area
                     if self.proj_y <= screen_y <= self.proj_y + self.proj_height:
-                        self.draw_hold(int(screen_x), int(screen_y), hold['type'])
+                        # Draw to render surface instead of screen
+                        adjusted_x, adjusted_y, scale_factor = self.apply_keystone(int(screen_x), int(screen_y))
+                        adjusted_size = int(self.hold_size * scale_factor)
+                        color = self.HOLD_COLORS.get(hold['type'], self.HOLD_COLORS['regular'])
+                        pygame.draw.circle(self.render_surface, color, (adjusted_x, adjusted_y), adjusted_size)
+                        pygame.draw.circle(self.render_surface, (255, 255, 255), (adjusted_x, adjusted_y), adjusted_size, 2)
+        
+        # Rotate the render surface 90 degrees clockwise
+        rotated = pygame.transform.rotate(self.render_surface, -90)  # Negative for clockwise
+        
+        # Handle fullscreen display with aspect ratio preservation
+        if self.is_fullscreen and self.fullscreen_dims:
+            # Scale the rotated surface to the calculated dimensions
+            scaled = pygame.transform.scale(rotated, self.fullscreen_dims)
+            # Blit to the center of the screen
+            self.screen.blit(scaled, self.fullscreen_offset)
+        else:
+            # Normal windowed mode
+            self.screen.blit(rotated, (0, 0))
         
         # Update display
         pygame.display.flip()

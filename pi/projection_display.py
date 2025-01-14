@@ -27,200 +27,114 @@ class ProjectionDisplay:
         print("Starting projection display...")
         pygame.init()
         
-        # Set up display in windowed mode with 5:3 aspect ratio for wide display
-        # Using 1000x600 as default size (maintains 5:3 ratio)
-        self.width = 1000
-        self.height = 600
+        self.width = 600
+        self.height = 1000
         self.screen = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE)
         pygame.display.set_caption("HoldSleuth Projection Display")
         print(f"Created window: {self.width}x{self.height}")
         
-        # Track fullscreen state
         self.is_fullscreen = False
+        self.keystone = 0.0  # Keystone adjustment
         
-        # Calculate projection area (5:3 aspect ratio)
         self.update_projection_area()
         
-        # Projection state
         self.wall_position = 0
         self.hold_size = 20
         self.route = None
         self.running = True
         
-        # Network setup
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(('0.0.0.0', port))
-        self.sock.settimeout(0.1)  # Set a shorter timeout for more responsive shutdown
+        self.sock.settimeout(0.1)
         print(f"Listening for UDP messages on port {port}")
         
-        # Initialize network thread but don't start it yet
         self.network_thread = None
 
     def update_projection_area(self):
-        """Recalculate projection area based on current window size"""
         self.width, self.height = self.screen.get_size()
-        self.proj_width = self.width - 40
-        self.proj_height = int(self.proj_width * (3/5))
-        if self.proj_height > self.height - 40:
-            self.proj_height = self.height - 40
-            self.proj_width = int(self.proj_height * (5/3))
-            
+        self.proj_height = self.height - 40
+        self.proj_width = int(self.proj_height * (3/5))
+        if self.proj_width > self.width - 40:
+            self.proj_width = self.width - 40
+            self.proj_height = int(self.proj_width * (5/3))
         self.proj_x = (self.width - self.proj_width) // 2
         self.proj_y = (self.height - self.proj_height) // 2
         print(f"Updated projection area: {self.proj_width}x{self.proj_height} at ({self.proj_x}, {self.proj_y})")
 
     def toggle_fullscreen(self):
-        """Toggle between fullscreen and windowed mode"""
         self.is_fullscreen = not self.is_fullscreen
         if self.is_fullscreen:
-            # Get the current display info
             display_info = pygame.display.Info()
-            # Switch to fullscreen mode using the current display resolution
             self.screen = pygame.display.set_mode((display_info.current_w, display_info.current_h), pygame.FULLSCREEN)
         else:
-            # Switch back to windowed mode with wide dimensions
             self.screen = pygame.display.set_mode((1000, 600), pygame.RESIZABLE)
-        
-        # Update projection area for new window size
         self.update_projection_area()
 
     def handle_network(self):
-        """Handle incoming network messages."""
         print("Network thread started")
-        
-        while self.running:  # Use self.running instead of True for proper shutdown
+        while self.running:
             try:
-                data, addr = self.sock.recvfrom(65536)  # Max UDP packet size
+                data, addr = self.sock.recvfrom(65536)
                 print(f"\nReceived message from {addr}")
-                
                 try:
                     message = json.loads(data.decode())
                     msg_type = message.get('type')
                     msg_data = message.get('data')
-                    
                     print(f"Message type: {msg_type}")
-                    
                     if msg_type == 'route':
-                        print("Processing route data:")
-                        print(f"Route name: {msg_data.get('name')}")
-                        print(f"Number of holds: {len(msg_data.get('holds', []))}")
                         self.current_route = msg_data
                         print("Route loaded successfully")
-                    
                     elif msg_type == 'position':
-                        old_pos = self.wall_position
                         self.wall_position = float(msg_data)
-                        print(f"Updated position: {old_pos} -> {self.wall_position}")
-                    
                     elif msg_type == 'hold_size':
-                        old_size = self.hold_size
                         self.hold_size = int(msg_data)
-                        print(f"Updated hold size: {old_size} -> {self.hold_size}")
-                    
                 except json.JSONDecodeError as e:
                     print(f"Error decoding message: {e}")
-                except Exception as e:
-                    print(f"Error processing message: {e}")
-                    
             except socket.timeout:
-                # This is normal, just continue
                 continue
             except Exception as e:
-                if self.running:  # Only print error if we're still supposed to be running
+                if self.running:
                     print(f"Network error: {e}")
-        
         print("Network thread stopping")
 
-    def draw_hold(self, x: int, y: int, hold_type: str):
+    def draw_hold(self, x: int, y: int, hold_type: str, surface):
         color = self.HOLD_COLORS.get(hold_type, self.HOLD_COLORS['regular'])
-        pygame.draw.circle(self.screen, color, (x, y), self.hold_size)
-        pygame.draw.circle(self.screen, (255, 255, 255), (x, y), self.hold_size, 2)
+        pygame.draw.circle(surface, color, (x, y), self.hold_size)
+        pygame.draw.circle(surface, (255, 255, 255), (x, y), self.hold_size, 2)
 
     def render(self):
-        """Render the current frame."""
-        # Clear screen
-        self.screen.fill((0, 0, 0))
+        content_surface = pygame.Surface((self.width, self.height))
+        content_surface.fill((0, 0, 0))
         
-        # Draw projection border
-        pygame.draw.rect(self.screen, (255, 255, 255), 
-                        (self.proj_x, self.proj_y, self.proj_width, self.proj_height), 2)
+        col_spacing = self.proj_width / 8
+        row_spacing = self.proj_height / 20
 
-        # Draw route if loaded
-        if hasattr(self, 'current_route') and self.current_route:
-            # Each segment is 40 units, but we only show 20 units at a time
-            segment_width = self.proj_width / 20  # Scale to show only 20 units
-            
-            # Debug info
-            print("\nRendering route:", self.current_route.get('name'))
-            print(f"Projection area: {self.proj_width}x{self.proj_height} at ({self.proj_x}, {self.proj_y})")
-            print(f"Segment width: {segment_width} pixels (showing 20 units)")
-            print(f"Wall position: {self.wall_position}")
-            
-            # Sort holds by segment and y position for debugging
-            holds = sorted(self.current_route.get('holds', []), 
-                         key=lambda h: (h['segment'], h['y']))
-            
-            # Draw holds
-            for hold in holds:
-                # In the source coordinate system:
-                # x goes from 0 (right) to 40 (left) within a segment
-                # y goes from 0 (top) to 7 (bottom)
-                
-                # Calculate base position within segment
-                hold_x = hold['x']  # 0-7 for columns
-                hold_y = hold['y']  # Position within column (0-39)
-                segment = hold['segment']
-                
-                # Convert to screen coordinates
-                # Start from right edge (proj_x + proj_width) and move left
-                # Scale the y position to show only 20 units at a time
-                screen_x = (self.proj_x + self.proj_width) - (hold_y * segment_width)
-                
-                # Y coordinate goes top to bottom, scaled to height
-                screen_y = self.proj_y + (hold_x * self.proj_height / 8)
-                
-                # Apply segment offset (segments move leftward)
-                # Each segment is 40 units, so multiply by 2 to maintain proper spacing
-                segment_offset = (segment * 40 + self.wall_position) * segment_width
-                screen_x -= segment_offset
-                
-                # Debug info for each hold
-                print(f"Hold: seg={segment} x={hold_x} y={hold_y} type={hold['type']}")
-                print(f"  Screen pos: ({int(screen_x)}, {int(screen_y)})")
-                
-                # Only draw if within projection area and within visible 20 units
-                if (self.proj_x <= screen_x <= self.proj_x + self.proj_width and
-                    0 <= (hold_y - (segment * 40 + self.wall_position)) < 20):  # Only show 20 units
-                    self.draw_hold(int(screen_x), int(screen_y), hold['type'])
-                else:
-                    print("  Hold outside projection area or visible range")
-            
-            # Draw segment boundaries (optional)
-            for seg in range(3):  # Assuming max 3 segments
-                # Calculate segment line x position
-                # Start from right edge and move left with segments
-                seg_x = (self.proj_x + self.proj_width) - ((seg * 40 + self.wall_position) * segment_width)
-                
-                if self.proj_x <= seg_x <= self.proj_x + self.proj_width:
-                    pygame.draw.line(self.screen, (51, 51, 51),
-                                   (int(seg_x), self.proj_y),
-                                   (int(seg_x), self.proj_y + self.proj_height))
+        for i in range(9):  
+            x = self.proj_x + (i * col_spacing)
+            pygame.draw.line(content_surface, (51, 51, 51), (x, self.proj_y), (x, self.proj_y + self.proj_height))
         
-        # Update display
+        for i in range(21):  
+            y = self.proj_y + (i * row_spacing)
+            pygame.draw.line(content_surface, (51, 51, 51), (self.proj_x, y), (self.proj_x + self.proj_width, y))
+        
+        if hasattr(self, 'current_route') and self.current_route:
+            for hold in self.current_route.get('holds', []):
+                screen_x = self.proj_x + (hold['x'] * col_spacing)
+                screen_y = self.proj_y + (hold['y'] * row_spacing)
+                self.draw_hold(int(screen_x), int(screen_y), hold['type'], content_surface)
+        
+        rotated_surface = pygame.transform.rotate(content_surface, -90)
+        self.screen.fill((0, 0, 0))
+        self.screen.blit(rotated_surface, (0, 0))
         pygame.display.flip()
 
     def run(self):
-        """Main loop for the projection display."""
         print("Starting main loop...")
         clock = pygame.time.Clock()
-        
-        # Start network thread
         self.network_thread = threading.Thread(target=self.handle_network)
         self.network_thread.start()
-        
         try:
             while self.running:
-                # Handle Pygame events
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         self.running = False
@@ -229,31 +143,19 @@ class ProjectionDisplay:
                             self.running = False
                         elif event.key == pygame.K_f:
                             self.toggle_fullscreen()
-                
-                # Render the current frame
                 self.render()
-                
-                # Cap at 60 FPS
                 clock.tick(60)
-        
         except Exception as e:
             print(f"Error in main loop: {e}")
         finally:
             print("Shutting down projection display...")
-            self.running = False  # Signal threads to stop
-            
-            # Wait for network thread to finish
+            self.running = False
             if self.network_thread and self.network_thread.is_alive():
-                print("Waiting for network thread to stop...")
-                self.network_thread.join(timeout=1.0)  # Wait up to 1 second
-            
-            # Close socket and quit pygame
-            print("Closing socket...")
+                self.network_thread.join(timeout=1.0)
             self.sock.close()
-            print("Quitting pygame...")
             pygame.quit()
             print("Shutdown complete")
 
 if __name__ == '__main__':
     display = ProjectionDisplay()
-    display.run() 
+    display.run()
