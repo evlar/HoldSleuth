@@ -1,4 +1,4 @@
-# HoldSleuth
+# ShineOn
 
 A computer vision project for detecting and analyzing climbing holds using multiple detection methods.
 
@@ -65,13 +65,13 @@ You can set up this project using either Conda (recommended) or standard Python 
 2. Clone the repository:
    ```bash
    git clone <repository-url>
-   cd holdsleuth
+   cd shineon
    ```
 
 3. Create and activate a new conda environment:
    ```bash
-   conda create -n holdsleuth python=3.8
-   conda activate holdsleuth
+   conda create -n shineon python=3.8
+   conda activate shineon
    ```
 
 4. Install PyTorch and other dependencies:
@@ -97,7 +97,7 @@ While you can use Python's venv, we recommend using Conda as it handles deep lea
 1. Clone the repository:
    ```bash
    git clone <repository-url>
-   cd holdsleuth
+   cd shineon
    ```
 
 2. Create and activate a virtual environment:
@@ -140,7 +140,7 @@ The projection display runs on a Raspberry Pi. To set it up:
 1. Clone the repository on your Raspberry Pi:
    ```bash
    git clone <repository-url>
-   cd holdsleuth
+   cd shineon
    ```
 
 2. Install the Raspberry Pi dependencies:
@@ -168,7 +168,7 @@ Controls:
 ## Project Structure
 
 ```
-HoldSleuth/
+ShineOn/
 ├── image_detection/       # Core detection modules
 │   ├── sam_blob_extractor.py  # SAM-based shape extraction
 │   ├── wall_scanner.py        # Wall scanning utilities

@@ -174,20 +174,21 @@ class ProjectionDisplay:
         # Clear screen
         self.screen.fill((0, 0, 0))
         
-        # Draw projection border with keystone
-        # Draw grid matching climbing wall dimensions (20 units wide x 8 units tall)
+        # Calculate spacing for rows and columns
+        row_spacing = self.proj_height / 9
+        col_spacing = self.proj_width / 21
         
-        # Draw horizontal lines (8 divisions for height)
-        for i in range(9):  # 0 to 8 inclusive
-            y = self.proj_y + (i * self.proj_height / 8)
+        # Draw horizontal lines (8 lines for 9 spaces)
+        for i in range(1, 9):  # 1 to 8 inclusive
+            y = self.proj_y + (i * row_spacing)
             for x in range(self.proj_x, self.proj_x + self.proj_width, 10):
                 start = self.apply_keystone(x, int(y))[0:2]
                 end = self.apply_keystone(min(x + 10, self.proj_x + self.proj_width), int(y))[0:2]
                 pygame.draw.line(self.screen, (51, 51, 51), start, end)
         
-        # Draw vertical lines (20 divisions for width - half a segment)
-        for i in range(21):  # 0 to 20 inclusive
-            x = self.proj_x + (i * self.proj_width / 20)
+        # Draw vertical lines (20 lines for 21 spaces)
+        for i in range(1, 21):  # 1 to 20 inclusive
+            x = self.proj_x + (i * col_spacing)
             top_point = self.apply_keystone(int(x), self.proj_y)[0:2]
             bottom_point = self.apply_keystone(int(x), self.proj_y + self.proj_height)[0:2]
             pygame.draw.line(self.screen, (51, 51, 51), top_point, bottom_point)
