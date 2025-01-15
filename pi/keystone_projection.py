@@ -27,25 +27,48 @@ class ProjectionDisplay:
         print("Starting projection display...")
         pygame.init()
         
-        # Set up display in windowed mode with 3:5 aspect ratio for tall display
-        # Using 600x1000 as default size (maintains 3:5 ratio)
-        # Swap dimensions for 90-degree rotation
-        self.base_width = 600
-        self.base_height = 1000
-        # Create the actual display surface (swapped dimensions for 90° rotation)
-        self.screen = pygame.display.set_mode((self.base_height, self.base_width), pygame.RESIZABLE)
-        # Create a render surface for pre-rotation drawing
+        # Set up display with 28:57 aspect ratio (width:height)
+        self.base_width = 560  # 28 * 20
+        self.base_height = 1140  # 57 * 20
+        
+        # Get the display info for fullscreen setup
+        display_info = pygame.display.Info()
+        screen_width = display_info.current_w
+        screen_height = display_info.current_h
+        
+        # Create surfaces with normal orientation, rotation happens at display time
         self.render_surface = pygame.Surface((self.base_width, self.base_height))
+        
+        # Start in fullscreen mode
+        self.screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
         pygame.display.set_caption("HoldSleuth Projection Display")
-        print(f"Created window: {self.base_width}x{self.base_height} (rotated)")
+        print(f"Created window: {screen_width}x{screen_height} (fullscreen)")
         
         # Track fullscreen state
-        self.is_fullscreen = False
+        self.is_fullscreen = True
+        
+        # Calculate initial fullscreen dimensions
+        target_ratio = 28/57  # Original width:height ratio
+        rotated_ratio = 57/28  # After 90-degree rotation
+        
+        # Calculate the maximum size that fits in the screen while maintaining ratio
+        if screen_width / screen_height > rotated_ratio:
+            # Too wide, use height to determine width
+            new_height = screen_height
+            new_width = int(screen_height * rotated_ratio)
+        else:
+            # Too tall, use width to determine height
+            new_width = screen_width
+            new_height = int(new_width / rotated_ratio)
+        
+        # Store the dimensions and offset for centered rendering
+        self.fullscreen_dims = (new_width, new_height)
+        self.fullscreen_offset = ((screen_width - new_width) // 2, (screen_height - new_height) // 2)
         
         # Keystone adjustment (0 = no adjustment)
         self.keystone = 0.0  # Range: -1.0 to 1.0
         
-        # Calculate projection area (3:5 aspect ratio)
+        # Calculate projection area
         self.update_projection_area()
         
         # Projection state
@@ -71,17 +94,26 @@ class ProjectionDisplay:
         self.width = rotated_height
         self.height = rotated_width
         
-        self.proj_height = self.height - 40
-        self.proj_width = int(self.proj_height * (3/5))
-        if self.proj_width > self.width - 40:
-            self.proj_width = self.width - 40
-            self.proj_height = int(self.proj_width * (5/3))
-            
+        # Create render surface at base dimensions to maintain ratio
+        self.render_surface = pygame.Surface((self.base_width, self.base_height))
+        
+        # Calculate maximum projection area that maintains 28:57 ratio
+        target_ratio = 28/57  # Width:Height ratio
+        
+        # Calculate dimensions that will fill the available space while maintaining ratio
+        if self.width / self.height > target_ratio:
+            # Too wide, use height to determine width
+            self.proj_height = self.height
+            self.proj_width = int(self.height * target_ratio)
+        else:
+            # Too tall, use width to determine height
+            self.proj_width = self.width
+            self.proj_height = int(self.width / target_ratio)
+        
+        # Center the projection area
         self.proj_x = (self.width - self.proj_width) // 2
         self.proj_y = (self.height - self.proj_height) // 2
         
-        # Update render surface size
-        self.render_surface = pygame.Surface((self.width, self.height))
         print(f"Updated projection area: {self.proj_width}x{self.proj_height} at ({self.proj_x}, {self.proj_y})")
 
     def toggle_fullscreen(self):
@@ -93,27 +125,28 @@ class ProjectionDisplay:
             screen_width = display_info.current_w
             screen_height = display_info.current_h
             
-            # Calculate dimensions that maintain 3:5 aspect ratio
-            # Remember we're rotated 90 degrees, so width:height should be 5:3
-            target_ratio = 5/3  # Width:Height ratio we want after rotation
-            current_ratio = screen_width / screen_height
-            
-            if current_ratio > target_ratio:
-                # Screen is too wide, use height to calculate width
-                new_width = int(screen_height * target_ratio)
-                new_height = screen_height
-            else:
-                # Screen is too tall, use width to calculate height
-                new_width = screen_width
-                new_height = int(screen_width / target_ratio)
-            
             # Switch to fullscreen mode
             self.screen = pygame.display.set_mode((screen_width, screen_height), pygame.FULLSCREEN)
-            # Store the dimensions for centered rendering
+            
+            # Calculate dimensions that maintain 28:57 ratio after rotation
+            target_ratio = 28/57  # Original width:height ratio
+            rotated_ratio = 25/57  # After 90-degree rotation
+            
+            # Calculate the maximum size that fits in the screen while maintaining ratio
+            if screen_width / screen_height > rotated_ratio:
+                # Too wide, use height to determine width
+                new_height = screen_height
+                new_width = int(screen_height * rotated_ratio)
+            else:
+                # Too tall, use width to determine height
+                new_width = screen_width
+                new_height = int(new_width / rotated_ratio)
+            
+            # Store the dimensions and offset for centered rendering
             self.fullscreen_dims = (new_width, new_height)
             self.fullscreen_offset = ((screen_width - new_width) // 2, (screen_height - new_height) // 2)
         else:
-            # Switch back to windowed mode with swapped dimensions
+            # Switch back to windowed mode with swapped dimensions for rotation
             self.screen = pygame.display.set_mode((self.base_height, self.base_width), pygame.RESIZABLE)
             self.fullscreen_dims = None
             self.fullscreen_offset = None
@@ -209,32 +242,41 @@ class ProjectionDisplay:
         self.render_surface.fill((0, 0, 0))
         self.screen.fill((0, 0, 0))
         
-        # Calculate spacing for rows and columns
-        col_spacing = self.proj_width / 8  # 8 columns (0-7)
-        row_spacing = self.proj_height / 20  # Show 20 rows at a time (half segment)
+        # Calculate spacing based on the render surface dimensions
+        col_spacing = self.base_width / 7  # 7 spaces for 8 lines
+        row_spacing = self.base_height / 19  # 19 spaces for 20 lines
+        
+        # Calculate border inset
+        border_x = col_spacing / 2
+        border_width = self.base_width - col_spacing
+        border_y = row_spacing / 2
+        border_height = self.base_height - row_spacing
         
         # Draw grid lines
-        # Vertical lines (9 lines for 8 columns)
-        for i in range(9):
-            x = self.proj_x + (i * col_spacing)
-            top_point = self.apply_keystone(int(x), self.proj_y)[0:2]
-            bottom_point = self.apply_keystone(int(x), self.proj_y + self.proj_height)[0:2]
+        # Vertical lines (8 internal lines)
+        for i in range(9):  # 0 to 8 inclusive for 8 lines
+            if i == 0 or i == 8:  # Skip first and last positions (borders)
+                continue
+            x = border_x + ((i - 1) * (border_width / 7))  # Divide remaining space into 7 parts for 8 lines
+            top_point = self.apply_keystone(int(x), border_y)[0:2]
+            bottom_point = self.apply_keystone(int(x), border_y + border_height)[0:2]
             pygame.draw.line(self.render_surface, (51, 51, 51), top_point, bottom_point)
         
-        # Horizontal lines (21 lines for 20 rows)
-        for i in range(21):
-            y = self.proj_y + (i * row_spacing)
-            for x in range(self.proj_x, self.proj_x + self.proj_width, 10):
-                start = self.apply_keystone(x, int(y))[0:2]
-                end = self.apply_keystone(min(x + 10, self.proj_x + self.proj_width), int(y))[0:2]
-                pygame.draw.line(self.render_surface, (51, 51, 51), start, end)
+        # Horizontal lines (20 internal lines)
+        for i in range(21):  # 0 to 20 inclusive for 20 lines
+            if i == 0 or i == 20:  # Skip first and last positions (borders)
+                continue
+            y = border_y + ((i - 1) * (border_height / 19))  # Divide remaining space into 19 parts for 20 lines
+            left_point = self.apply_keystone(border_x, int(y))[0:2]
+            right_point = self.apply_keystone(border_x + border_width, int(y))[0:2]
+            pygame.draw.line(self.render_surface, (51, 51, 51), left_point, right_point)
         
         # Draw border
         border_points = [
-            self.apply_keystone(self.proj_x, self.proj_y)[0:2],  # Top left
-            self.apply_keystone(self.proj_x + self.proj_width, self.proj_y)[0:2],  # Top right
-            self.apply_keystone(self.proj_x + self.proj_width, self.proj_y + self.proj_height)[0:2],  # Bottom right
-            self.apply_keystone(self.proj_x, self.proj_y + self.proj_height)[0:2],  # Bottom left
+            self.apply_keystone(border_x, border_y)[0:2],  # Top left
+            self.apply_keystone(border_x + border_width, border_y)[0:2],  # Top right
+            self.apply_keystone(border_x + border_width, border_y + border_height)[0:2],  # Bottom right
+            self.apply_keystone(border_x, border_y + border_height)[0:2],  # Bottom left
         ]
         pygame.draw.lines(self.render_surface, (255, 255, 255), True, border_points, 2)
 
@@ -256,8 +298,8 @@ class ProjectionDisplay:
                 hold_x = hold['x']  # 0-7 horizontal position
                 hold_y = hold['y']  # 0-39 vertical position within segment
                 
-                # Convert to screen coordinates
-                screen_x = self.proj_x + (hold_x * col_spacing)
+                # Convert to screen coordinates using the new spacing
+                screen_x = border_x + (hold_x * (border_width / 7))  # Divide by 7 for 8 positions
                 
                 # Calculate which part of the segment should be visible
                 visible_start = row_offset - (segment_progress * 20)  # Starts at 20, moves down to 0
@@ -267,10 +309,10 @@ class ProjectionDisplay:
                 if visible_start <= hold_y < visible_end:
                     # Map the hold's position to the display area
                     relative_y = hold_y - visible_start
-                    screen_y = self.proj_y + (relative_y * row_spacing)
+                    screen_y = border_y + (relative_y * (border_height / 19))  # Divide by 19 for 20 positions
                     
                     # Only draw if within projection area
-                    if self.proj_y <= screen_y <= self.proj_y + self.proj_height:
+                    if border_y <= screen_y <= border_y + border_height:
                         # Draw to render surface instead of screen
                         adjusted_x, adjusted_y, scale_factor = self.apply_keystone(int(screen_x), int(screen_y))
                         adjusted_size = int(self.hold_size * scale_factor)
@@ -279,17 +321,17 @@ class ProjectionDisplay:
                         pygame.draw.circle(self.render_surface, (255, 255, 255), (adjusted_x, adjusted_y), adjusted_size, 2)
         
         # Rotate the render surface 90 degrees clockwise
-        rotated = pygame.transform.rotate(self.render_surface, -90)  # Negative for clockwise
+        rotated = pygame.transform.rotate(self.render_surface, -90)
         
         # Handle fullscreen display with aspect ratio preservation
         if self.is_fullscreen and self.fullscreen_dims:
-            # Scale the rotated surface to the calculated dimensions
-            scaled = pygame.transform.scale(rotated, self.fullscreen_dims)
-            # Blit to the center of the screen
+            # Scale the rotated surface to the calculated fullscreen dimensions
+            scaled = pygame.transform.smoothscale(rotated, self.fullscreen_dims)
             self.screen.blit(scaled, self.fullscreen_offset)
         else:
-            # Normal windowed mode
-            self.screen.blit(rotated, (0, 0))
+            # Scale for windowed mode
+            scaled = pygame.transform.smoothscale(rotated, (self.screen.get_height(), self.screen.get_width()))
+            self.screen.blit(scaled, (0, 0))
         
         # Update display
         pygame.display.flip()
