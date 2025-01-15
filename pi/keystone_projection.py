@@ -374,11 +374,13 @@ class ProjectionDisplay:
                             self.running = False
                         elif event.key == pygame.K_f:
                             self.toggle_fullscreen()
-                        # Add keystone adjustment controls
-                        elif event.key == pygame.K_LEFT:
-                            self.adjust_keystone(-0.1)  # Adjust left
-                        elif event.key == pygame.K_RIGHT:
-                            self.adjust_keystone(0.1)   # Adjust right
+                
+                # Handle keystone adjustment with smoother control
+                keys = pygame.key.get_pressed()
+                if keys[pygame.K_LEFT]:
+                    self.adjust_keystone(-0.02)  # Smaller adjustment for finer control
+                if keys[pygame.K_RIGHT]:
+                    self.adjust_keystone(0.02)   # Smaller adjustment for finer control
                 
                 # Render the current frame
                 self.render()
