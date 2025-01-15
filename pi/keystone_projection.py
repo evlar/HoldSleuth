@@ -31,6 +31,16 @@ class ProjectionDisplay:
         self.base_width = 560  # 28 * 20
         self.base_height = 1140  # 57 * 20
         
+        # Calculate border dimensions
+        col_spacing = self.base_width / 7  # 7 spaces for 8 lines
+        row_spacing = self.base_height / 19  # 19 spaces for 20 lines
+        
+        # Store border dimensions as class attributes
+        self.border_x = col_spacing / 2
+        self.border_width = self.base_width - col_spacing
+        self.border_y = row_spacing / 2
+        self.border_height = self.base_height - row_spacing
+        
         # Get the display info for fullscreen setup
         display_info = pygame.display.Info()
         screen_width = display_info.current_w
@@ -206,35 +216,36 @@ class ProjectionDisplay:
         self.keystone = max(-1.0, min(1.0, self.keystone + amount))
         print(f"Keystone adjusted to: {self.keystone}")
 
-    def apply_keystone(self, x: int, y: int) -> tuple[int, int]:
+    def apply_keystone(self, x: int, y: int, base_scale: float = 1.0) -> tuple[int, int, float]:
         """Apply keystone transformation to a point.
         Creates a proper trapezoidal correction where the top is wider/narrower than the bottom,
         and the content is scaled appropriately."""
-        # Calculate relative position within projection area
-        rel_x = (x - self.proj_x) / self.proj_width
-        rel_y = (y - self.proj_y) / self.proj_height
+        # Calculate relative position within the entire projection area
+        rel_x = x / self.base_width
+        rel_y = y / self.base_height
         
         # Calculate the width at this y position
         # At rel_y = 0 (top), width is scaled by (1 + keystone)
         # At rel_y = 1 (bottom), width is scaled by (1 - keystone)
-        scale_factor = 1.0 - (self.keystone * (2 * rel_y - 1))
+        scale_factor = (1.0 + (self.keystone * (1.0 - 2.0 * rel_y))) * base_scale
         
         # Calculate new x position based on the scaled width
         # Center point of each horizontal line stays fixed
-        scaled_x = self.proj_x + (self.proj_width * 0.5) + ((rel_x - 0.5) * self.proj_width * scale_factor)
+        center_x = self.base_width * 0.5
+        scaled_x = center_x + ((x - center_x) * scale_factor)
         
         return int(scaled_x), y, scale_factor
 
-    def draw_hold(self, x: int, y: int, hold_type: str):
+    def draw_hold(self, x: int, y: int, hold_type: str, scale_factor: float = 1.0):
         """Draw a hold with keystone correction."""
-        adjusted_x, adjusted_y, scale_factor = self.apply_keystone(x, y)
+        adjusted_x, adjusted_y, adj_scale = self.apply_keystone(x, y, scale_factor)
         
-        # Scale the hold size based on the keystone transformation
-        adjusted_size = int(self.hold_size * scale_factor)
+        # Scale the hold size based on the keystone transformation and base scale
+        adjusted_size = int(self.hold_size * scale_factor * adj_scale)
         
         color = self.HOLD_COLORS.get(hold_type, self.HOLD_COLORS['regular'])
-        pygame.draw.circle(self.screen, color, (adjusted_x, adjusted_y), adjusted_size)
-        pygame.draw.circle(self.screen, (255, 255, 255), (adjusted_x, adjusted_y), adjusted_size, 2)
+        pygame.draw.circle(self.render_surface, color, (adjusted_x, adjusted_y), adjusted_size)
+        pygame.draw.circle(self.render_surface, (255, 255, 255), (adjusted_x, adjusted_y), adjusted_size, 2)
 
     def render(self):
         """Render the current frame."""
@@ -246,37 +257,50 @@ class ProjectionDisplay:
         col_spacing = self.base_width / 7  # 7 spaces for 8 lines
         row_spacing = self.base_height / 19  # 19 spaces for 20 lines
         
-        # Calculate border inset
-        border_x = col_spacing / 2
-        border_width = self.base_width - col_spacing
-        border_y = row_spacing / 2
-        border_height = self.base_height - row_spacing
+        # Calculate maximum scale needed for keystone
+        # The widest part will be scaled by (1 + |keystone|)
+        max_scale = 1.0 + abs(self.keystone)
         
-        # Draw grid lines
+        # Scale down the entire display proportionally to prevent cropping
+        scale_factor = 1.0 / max_scale
+        
+        # Adjust all dimensions for scaling
+        scaled_width = self.base_width * scale_factor
+        scaled_height = self.base_height * scale_factor
+        scaled_x_offset = (self.base_width - scaled_width) / 2
+        scaled_y_offset = (self.base_height - scaled_height) / 2
+        
+        # Adjust border dimensions for scaling
+        scaled_border_x = scaled_x_offset + (self.border_x * scale_factor)
+        scaled_border_width = self.border_width * scale_factor
+        scaled_border_y = scaled_y_offset + (self.border_y * scale_factor)
+        scaled_border_height = self.border_height * scale_factor
+        
+        # Draw grid lines with scaled coordinates
         # Vertical lines (8 internal lines)
         for i in range(9):  # 0 to 8 inclusive for 8 lines
             if i == 0 or i == 8:  # Skip first and last positions (borders)
                 continue
-            x = border_x + ((i - 1) * (border_width / 7))  # Divide remaining space into 7 parts for 8 lines
-            top_point = self.apply_keystone(int(x), border_y)[0:2]
-            bottom_point = self.apply_keystone(int(x), border_y + border_height)[0:2]
+            x = scaled_border_x + ((i - 1) * (scaled_border_width / 7))
+            top_point = self.apply_keystone(int(x), scaled_border_y, scale_factor)[0:2]
+            bottom_point = self.apply_keystone(int(x), scaled_border_y + scaled_border_height, scale_factor)[0:2]
             pygame.draw.line(self.render_surface, (51, 51, 51), top_point, bottom_point)
         
         # Horizontal lines (20 internal lines)
         for i in range(21):  # 0 to 20 inclusive for 20 lines
             if i == 0 or i == 20:  # Skip first and last positions (borders)
                 continue
-            y = border_y + ((i - 1) * (border_height / 19))  # Divide remaining space into 19 parts for 20 lines
-            left_point = self.apply_keystone(border_x, int(y))[0:2]
-            right_point = self.apply_keystone(border_x + border_width, int(y))[0:2]
+            y = scaled_border_y + ((i - 1) * (scaled_border_height / 19))
+            left_point = self.apply_keystone(scaled_border_x, int(y), scale_factor)[0:2]
+            right_point = self.apply_keystone(scaled_border_x + scaled_border_width, int(y), scale_factor)[0:2]
             pygame.draw.line(self.render_surface, (51, 51, 51), left_point, right_point)
         
         # Draw border
         border_points = [
-            self.apply_keystone(border_x, border_y)[0:2],  # Top left
-            self.apply_keystone(border_x + border_width, border_y)[0:2],  # Top right
-            self.apply_keystone(border_x + border_width, border_y + border_height)[0:2],  # Bottom right
-            self.apply_keystone(border_x, border_y + border_height)[0:2],  # Bottom left
+            self.apply_keystone(scaled_border_x, scaled_border_y, scale_factor)[0:2],
+            self.apply_keystone(scaled_border_x + scaled_border_width, scaled_border_y, scale_factor)[0:2],
+            self.apply_keystone(scaled_border_x + scaled_border_width, scaled_border_y + scaled_border_height, scale_factor)[0:2],
+            self.apply_keystone(scaled_border_x, scaled_border_y + scaled_border_height, scale_factor)[0:2],
         ]
         pygame.draw.lines(self.render_surface, (255, 255, 255), True, border_points, 2)
 
@@ -298,8 +322,8 @@ class ProjectionDisplay:
                 hold_x = hold['x']  # 0-7 horizontal position
                 hold_y = hold['y']  # 0-39 vertical position within segment
                 
-                # Convert to screen coordinates using the new spacing
-                screen_x = border_x + (hold_x * (border_width / 7))  # Divide by 7 for 8 positions
+                # Convert to screen coordinates using scaled spacing
+                screen_x = scaled_border_x + (hold_x * (scaled_border_width / 7))
                 
                 # Calculate which part of the segment should be visible
                 visible_start = row_offset - (segment_progress * 20)  # Starts at 20, moves down to 0
@@ -309,16 +333,10 @@ class ProjectionDisplay:
                 if visible_start <= hold_y < visible_end:
                     # Map the hold's position to the display area
                     relative_y = hold_y - visible_start
-                    screen_y = border_y + (relative_y * (border_height / 19))  # Divide by 19 for 20 positions
+                    screen_y = scaled_border_y + (relative_y * (scaled_border_height / 19))
                     
-                    # Only draw if within projection area
-                    if border_y <= screen_y <= border_y + border_height:
-                        # Draw to render surface instead of screen
-                        adjusted_x, adjusted_y, scale_factor = self.apply_keystone(int(screen_x), int(screen_y))
-                        adjusted_size = int(self.hold_size * scale_factor)
-                        color = self.HOLD_COLORS.get(hold['type'], self.HOLD_COLORS['regular'])
-                        pygame.draw.circle(self.render_surface, color, (adjusted_x, adjusted_y), adjusted_size)
-                        pygame.draw.circle(self.render_surface, (255, 255, 255), (adjusted_x, adjusted_y), adjusted_size, 2)
+                    if scaled_border_y <= screen_y <= scaled_border_y + scaled_border_height:
+                        self.draw_hold(int(screen_x), int(screen_y), hold['type'], scale_factor)
         
         # Rotate the render surface 90 degrees clockwise
         rotated = pygame.transform.rotate(self.render_surface, -90)
